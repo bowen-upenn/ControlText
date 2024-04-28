@@ -1,0 +1,30 @@
+dataset:
+  images_dir: 'test_dataset/source'
+  targets_dir: 'test_dataset/target'
+  targets_curved_dir: 'test_dataset/target_curved'
+  coeffs_dir: 'test_dataset/coeffs'
+  image_size: 512
+  train_val_split: 0.95
+  percent_train: 1 #0.001
+  percent_valid: 1 #0.01
+model:
+  out_channels: 16
+  bottleneck_out_dim: 524288
+training:
+  run_mode: 'train'
+  step: 'rectify' # 'extract', 'rectify'
+  checkpoint_path: 'unet_ckpts'
+  continue_train: False
+  batch_size: 32
+  learning_rate: 0.0001
+  patience: 10
+  start_epoch: 0
+  test_epoch: 15
+  num_epochs: 100
+  print_every: 300
+  val_every: 700
+  lambda_loss_color_map: 1
+  bce_pos_weight: 1
+  bce_weight: 0.3
+  dice_weight: 0.7
+  lambda_reg: 10
