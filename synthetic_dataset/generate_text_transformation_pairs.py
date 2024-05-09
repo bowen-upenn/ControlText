@@ -6,15 +6,15 @@ import random
 import string
 from tqdm import tqdm
 from PIL import Image, ImageDraw, ImageFont, ImageEnhance, ImageOps, ImageColor
-from fontTools.ttLib import TTFont
 from typing import List, Any
 import math
 import torch
 import torch.nn.functional as F
 
-import warnings
-# Suppress specific warnings from fontTools
-warnings.filterwarnings("ignore", message="extra bytes in post.stringData array")
+import logging
+from fontTools.ttLib import TTFont
+# Set the logging level for fontTools to ERROR to suppress warnings
+logging.getLogger('fontTools').setLevel(logging.ERROR)
 
 from restore_from_transformations import *
 
@@ -38,7 +38,7 @@ def load_fonts(fonts_dir, chinese=False, popular_fonts=None, popular_font_weight
 
 
 def text_is_supported(font_path, text):
-    char = text[0]
+    char = text[1]
     font = TTFont(font_path)
     for table in font['cmap'].tables:
         if ord(char) in table.cmap:
@@ -595,7 +595,7 @@ def generate_text_image_pairs(num_pairs, image_size, fonts_dir, output_dir, back
                     font_path = load_fonts(fonts_dir, chinese=flag_chinese_all_lines[l])
                     # print('text', text, 'font_path', font_path)
                     font_size, text_width, text_height = get_max_font_size(texts_all_lines[l], font_path, num_lines)
-                    if not text_is_supported(font_path, texts_all_lines[l]) or font_path in font_path_all_lines or font_size == -1:
+                    if (not text_is_supported(font_path, texts_all_lines[l])) or (font_path in font_path_all_lines) or (font_size == -1):
                         continue
                     font_path_all_lines.append(font_path)
                     font_size_all_lines.append(font_size)
