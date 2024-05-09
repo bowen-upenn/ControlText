@@ -19,8 +19,6 @@ from PIL import Image
 
 from unet_models import ModifiedUNet
 from unet_dataloader import SyntheticDataset
-from generate_text_transformation_pairs import recover_from_perspective_torch, recover_from_curvature_torch, \
-    recover_from_perspective, recover_from_curvature, recover_from_perspective_torch_with_flow, recover_from_curvature_torch_with_flow, apply_optical_flow_to_recover
 
 
 def setup(rank, world_size):
@@ -95,85 +93,30 @@ def training(gpu, args, train_subset, val_subset):
         print('Start Training... EPOCH %d / %d\n' % (epoch, args['training']['num_epochs']))
 
         for batch_idx, batch in enumerate(tqdm(train_loader)):
-            # sources, targets = batch
-            # sources = sources.to(rank)
-            # targets = targets.to(rank)
             if args['training']['step'] == 'extract':
                 sources, targets = batch
                 sources = sources.to(rank)
                 targets = targets.to(rank)
-            elif args['training']['step'] == 'rectify':
-                sources, target_imgs, coeffs = batch
-                sources = sources.to(rank)
-                targets = coeffs.to(rank)
             else:
-                assert False, "Invalid training step."
+                sources, target_corners, target_midlines = batch
+                sources = sources.to(rank)
+                target_corners = target_corners.to(rank)
+                target_midlines = target_midlines.to(rank)
 
             # Forward pass
             outputs = unet_model(sources)
 
             # Compute loss
             predictions = outputs.squeeze(dim=1)
-
-            loss = criterion.forward(predictions, targets)
-            running_loss_total += loss.item()
-
-            if args['training']['step'] == 'rectify':
-                perspective_coefficients = predictions[:, 3:]
-                identity_matrices = torch.eye(3).unsqueeze(0).repeat(perspective_coefficients.size(0), 1, 1).to(rank).flatten(1, 2)
-                loss_coef = criterion_mse.forward(predictions, targets)
-                loss_reg = args['training']['lambda_reg'] * criterion.forward(perspective_coefficients, identity_matrices)
-                loss = loss_coef + loss_reg
-                running_loss_coef += loss_coef.item()
-                running_loss_reg += loss_reg.item()
-
-            #     curvature_coefficients = targets[1][:3]
-            #     perspective_coefficients = targets[1][3:].reshape(3, 3)
-            #     # recovered_img, recovered_flow = recover_from_perspective_torch_with_flow(sources[1], perspective_coefficients)
-            #     # print('recovered_flow', recovered_flow.shape)
-            #     recovered_flow = torch.zeros(512, 512, 2).to(rank)
-            #     recovered_img, recovered_flow = recover_from_curvature_torch_with_flow(sources[1], curvature_coefficients, recovered_flow)
-            #     save_image(sources[1], 'toy_examples/test_flow_source_img.png')
-            #     save_image(recovered_img, 'toy_examples/test_flow_recovered_img.png')
-            #     save_image(recovered_flow[:, :, 0], 'toy_examples/test_flow_recovered_flow_x.png')
-            #     save_image(recovered_flow[:, :, 1], 'toy_examples/test_flow_recovered_flow_y.png')
-            #
-            #     print('recovered_flow', recovered_flow.shape, 'sources', sources[1].shape)
-            #     recovered_img_from_flow = apply_optical_flow_to_recover(images[1], recovered_flow)
-            #     save_image(recovered_img_from_flow, 'toy_examples/test_flow_recovered_img_from_flow.png')
-            else:
+            if args['training']['step'] == 'extract':
                 loss = criterion.forward(predictions, targets)
+                running_loss_total += loss.item()
+            else:
+                pred_corners = predictions[:, 0]
+                pred_midline = predictions[:, 1]
 
-            # if args['training']['step'] == 'rectify':
-            #     # Add recovery loss
-            #     # curvature_coefficients = predictions[:, :3]
-            #     # perspective_coefficients = predictions[:, 3:]#.reshape(3, 3)
-            #     curvature_coefficients = targets[:, :3]
-            #     perspective_coefficients = targets[:, 3:]#.reshape(3, 3)
-            #     # print('curvature_coefficients', curvature_coefficients, 'perspective_coefficients', perspective_coefficients)
-            #
-            #     recovered_imgs = recover_from_perspective_torch(sources, perspective_coefficients)
-            #     recovered_imgs = recover_from_curvature_torch(recovered_imgs, curvature_coefficients)
-            #
-            #     # save_image(recovered_imgs[0], 'outputs/test_recovered_0.png')
-            #     # save_image(sources[0], 'outputs/test_source_0.png')
-            #     # save_image(target_imgs[0], 'outputs/test_target_0.png')
-            #     # save_image(recovered_imgs[1], 'outputs/test_recovered_1.png')
-            #     # save_image(sources[1], 'outputs/test_source_1.png')
-            #     # save_image(target_imgs[1], 'outputs/test_target_1.png')
-
-            # # Treat the rendered texts as a binary mask
-            # if args['training']['step'] == 'extract':
-            #     loss = criterion_imgs.forward(predictions, targets)
-            # elif args['training']['step'] == 'rectify':
-            #     # loss = criterion_coeffs.forward(predictions, targets)
-            #     loss_recovery = criterion_imgs.forward(recovered_imgs, sources)
-            #     loss_coeffs = criterion_coeffs.forward(predictions, targets)
-            #     loss = loss_recovery + loss_coeffs
-            #     running_loss_recovery += loss_recovery.item()
-            #     running_loss_coeffs += loss_coeffs.item()
-            # else:
-            #     assert False, "Invalid training step."
+                loss = criterion.forward(pred_corners, target_corners) + criterion.forward(pred_midline, target_midlines)
+                running_loss_total += loss.item()
 
             # Backward pass
             optimizer.zero_grad()
@@ -187,13 +130,7 @@ def training(gpu, args, train_subset, val_subset):
                 writer.add_scalar('Learning_rate', optimizer.param_groups[0]['lr'], global_step)
 
             if batch_idx % args['training']['print_every'] == 0 or batch_idx + 1 == len(train_loader):
-                if args['training']['step'] == 'extract':
-                    print('Training Rank %d, epoch %d, batch %d, lr %.6f, loss %.6f' % (rank, epoch, batch_idx, optimizer.param_groups[0]['lr'], running_loss_total / (global_step + 1e-10)))
-                elif args['training']['step'] == 'rectify':
-                    print('Training Rank %d, epoch %d, batch %d, lr %.6f, loss %.6f, loss_coef %.6f, loss_reg %.6f' % (rank, epoch, batch_idx, optimizer.param_groups[0]['lr'],
-                          running_loss_total / (global_step + 1e-10), running_loss_coef / (global_step + 1e-10), running_loss_reg / (global_step + 1e-10)))
-                else:
-                    assert False, "Invalid training step."
+                print('Training Rank %d, epoch %d, batch %d, lr %.6f, loss %.6f' % (rank, epoch, batch_idx, optimizer.param_groups[0]['lr'], running_loss_total / (global_step + 1e-10)))
 
             if batch_idx > 0 and batch_idx % args['training']['val_every'] == 0:
                 # Validation
@@ -208,7 +145,7 @@ def training(gpu, args, train_subset, val_subset):
 
         # Save model checkpoint every epoch
         if rank == 0:
-            torch.save(unet_model.state_dict(), args['training']['checkpoint_path'] + '/unet_model_' + str(epoch) + '_' + args['training']['step'] + '.pth')
+            torch.save(unet_model.state_dict(), args['training']['checkpoint_path'] + '/unet_model_' + args['training']['step'] + '_' + str(epoch) + '_' + args['training']['step'] + '.pth')
         dist.monitored_barrier()
 
     dist.destroy_process_group()  # clean up
@@ -225,50 +162,43 @@ def validation(args, unet_model, val_loader, criterion, epoch, writer, rank, bat
     with torch.no_grad():
         for val_batch_idx, val_batch in enumerate(tqdm(val_loader)):
             if args['training']['step'] == 'extract':
-                val_sources, val_targets = val_batch
+                val_sources, val_targets = batch
                 val_sources = val_sources.to(rank)
                 val_targets = val_targets.to(rank)
-                # criterion = criterion_imgs
             else:
-                val_sources, val_target_imgs, val_coeffs = val_batch
+                val_sources, val_target_corners, val_target_midlines = batch
                 val_sources = val_sources.to(rank)
-                val_targets = val_coeffs.to(rank)
-                # criterion = criterion_coeffs
+                val_target_corners = val_target_corners.to(rank)
+                val_target_midlines = val_target_midlines.to(rank)
 
             # Forward pass
             val_outputs = unet_model(val_sources)
 
             # Compute loss
             val_predictions = val_outputs.squeeze(dim=1)
-            val_loss += criterion.forward(val_predictions, val_targets)
+            if args['training']['step'] == 'extract':
+                loss = criterion.forward(val_predictions, val_targets)
+            else:
+                val_pred_corners = val_predictions[:, 0]
+                val_pred_midline = val_predictions[:, 1]
+
+                val_loss += criterion.forward(val_pred_corners, val_target_corners) + criterion.forward(val_pred_midline, val_target_midlines)
 
             if val_batch_idx == 0 and rank == 0:
                 if args['training']['step'] == 'extract':
                     if epoch == 0:
-                        save_image(val_sources[0].cpu(), 'outputs/source_' + step + '_' + str(rank) + '.png')
-                        save_image(val_targets[0].cpu(), 'outputs/target_' + step + '_' + str(rank) + '.png')
+                        save_image(val_sources[0].cpu(), 'outputs/' + args['training']['step'] + '/source_' + step + '_' + str(rank) + '.png')
+                        save_image(val_targets[0].cpu(), 'outputs/' + args['training']['step'] + '/target_' + step + '_' + str(rank) + '.png')
 
                     save_image(val_predictions[0].cpu(), 'outputs/predicted_' + str(epoch) + '_' + str(batch_idx) + '_' + step + '_' + str(rank) + '.png')
                 else:
                     if epoch == 0:
-                        save_image(val_sources[0].cpu(), 'outputs/source_' + step + '_' + str(rank) + '.png')
-                        save_image(val_target_imgs[0].cpu(), 'outputs/target_' + step + '_' + str(rank) + '.png')
+                        save_image(val_sources[0].cpu(), 'outputs/' + args['training']['step'] + '/source_' + step + '_' + str(rank) + '.png')
+                        save_image(val_target_corners[0].cpu(), 'outputs/' + args['training']['step'] + '/target_corners_' + step + '_' + str(rank) + '.png')
+                        save_image(val_target_midlines[0].cpu(), 'outputs/' + args['training']['step'] + '/target_midlines_' + step + '_' + str(rank) + '.png')
 
-                    # Transform the source image back to canonical image using the predicted coefficients
-                    curvature_coefficients = val_predictions[0][:3]
-                    perspective_coefficients = val_predictions[0][3:].reshape(3, 3)
-                    # assert np.array_equal(perspective_coefficients.flatten(), val_predictions[0][3:].cpu().numpy()), "Reshape is incorrect."
-
-                    recovered_img = recover_from_perspective_torch(val_sources[0], perspective_coefficients, batch=False)
-                    recovered_img = recover_from_curvature_torch(recovered_img, curvature_coefficients, batch=False)
-                    # print('curvature_coefficients', curvature_coefficients)
-                    # print('filename', 'outputs/predicted_' + str(epoch) + '_' + str(batch_idx) + '_' + step + '.png')
-                    save_image(recovered_img, 'outputs/predicted_' + str(epoch) + '_' + str(batch_idx) + '_' + step + '_' + str(rank) + '.png')
-
-                    coeffs_dict = {'predict': val_predictions[0].cpu().numpy().tolist(), 'target': val_coeffs[0].cpu().numpy().tolist()}
-                    # print('coeffs_dict', coeffs_dict)
-                    with open('outputs/coeffs_' + str(epoch) + '_' + str(batch_idx) + '_' + step + '_' + str(rank) + '.json', 'w') as f:
-                        json.dump(coeffs_dict, f)
+                    save_image(val_pred_corners[0].cpu(), 'outputs/predicted_corners_' + str(epoch) + '_' + str(batch_idx) + '_' + step + '_' + str(rank) + '.png')
+                    save_image(val_pred_midline[0].cpu(), 'outputs/predicted_midline_' + str(epoch) + '_' + str(batch_idx) + '_' + step + '_' + str(rank) + '.png')
 
     val_loss /= len(val_loader)
 

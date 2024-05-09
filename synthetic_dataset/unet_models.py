@@ -34,9 +34,7 @@ class ModifiedUNet(nn.Module):
         if step == 'extract':
             self.prediction_head = nn.Conv2d(in_channels=base_model_final_channels, out_channels=1, kernel_size=1)  # sigmoid is in nn.BCEWithLogitsLoss
         elif step == 'rectify':
-            self.prediction_head = nn.Sequential(nn.Linear(in_features=base_model_final_channels, out_features=1024),
-                                                 nn.ReLU(),
-                                                 nn.Linear(in_features=1024, out_features=12))
+            self.prediction_head = nn.Conv2d(in_channels=base_model_final_channels, out_channels=2, kernel_size=1)
         else:
             raise ValueError('step must be either "extract" or "rectify"')
         # self.color_map_head = nn.Conv2d(in_channels=self.base_model_final_channels, out_channels=3, kernel_size=1)
@@ -44,16 +42,6 @@ class ModifiedUNet(nn.Module):
         if deformable:
             # Replace Conv2d with DeformConv2d
             self.replace_conv2d_with_deformconv2d(self.base_model)
-
-        if step == 'rectify':
-            # Dynamically extract all layers up to and including the bottleneck
-            layers = []
-            for layer_name, layer in base_model._modules.items():
-                layers.append(layer)
-                if layer_name == 'bottleneck':
-                    break
-            # Create a single sequential module containing all those layers
-            self.encoder_features = nn.Sequential(*layers)
 
     def replace_conv2d_in_sequential(self, sequential_module):
         """Replace all the Conv2d layers with DeformConv2d layers in a Sequential module.
@@ -112,14 +100,7 @@ class ModifiedUNet(nn.Module):
 
     def forward(self, x):
         # Forward pass through the base model
-        if self.step == 'extract':
-            base_output = self.base_model(x)
-        elif self.step == 'rectify':    # encoder and bottleneck only
-            base_output = self.encoder_features(x)
-            base_output = base_output.view(base_output.size(0), -1)
-        else:
-            raise ValueError('step must be either "extract" or "rectify"')
-
+        base_output = self.base_model(x)
         output = self.prediction_head(base_output)
         # color_map = self.color_map_head(base_output)
 

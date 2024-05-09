@@ -679,10 +679,10 @@ def generate_text_image_pairs(num_pairs, image_size, fonts_dir, output_dir, back
 if __name__ == "__main__":
     # Parameters for generating the synthetic dataset
     offset = 0
-    num_pairs = 10-offset
+    num_pairs = 50000-offset
     image_size = (512, 512)
     fonts_dir = "fonts"
-    output_dir = "toy_examples"
+    output_dir = "test_dataset"
     background_dir = "/tmp/datasets/coco/train2017"
 
     os.makedirs(output_dir + "/target", exist_ok=True)
