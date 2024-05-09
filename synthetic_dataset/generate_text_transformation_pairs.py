@@ -40,7 +40,7 @@ def get_text_dimensions(draw, text, font):
     return text_width, text_height
 
 
-def get_max_font_size(text, font_path, num_lines=1, max_margin=32, image_size=512, initial_font_size=10):
+def get_max_font_size(text, font_path, num_lines=1, max_margin=64, image_size=512, initial_font_size=10):
     background = Image.new('RGB', (image_size, image_size), 'black')
     background = ImageDraw.Draw(background)
 
@@ -48,13 +48,13 @@ def get_max_font_size(text, font_path, num_lines=1, max_margin=32, image_size=51
     # print('font_path', font_path, 'initial_font_size', initial_font_size)
     initial_font = ImageFont.truetype(font_path, initial_font_size)
     initial_text_width, initial_text_height = get_text_dimensions(background, text, initial_font)
-    initial_text_height *= num_lines
+    # initial_text_height *= num_lines
     if initial_text_width == 0 or initial_text_height == 0:
         return -1
 
     # Calculate the scaling factor for both width and height
     scale_factor_width = (image_size - 2 * max_margin) / initial_text_width
-    scale_factor_height = (image_size - 2 * max_margin) / initial_text_height
+    scale_factor_height = ((image_size - 2 * max_margin) / num_lines) / initial_text_height
 
     # Use the smaller scaling factor to ensure the text fits within both dimensions
     scale_factor = min(scale_factor_width, scale_factor_height)
@@ -62,6 +62,8 @@ def get_max_font_size(text, font_path, num_lines=1, max_margin=32, image_size=51
     # Calculate the maximum font size
     max_font_size = int(initial_font_size * scale_factor)
     new_text_width, new_text_height = get_text_dimensions(background, text, ImageFont.truetype(font_path, max_font_size))
+    print('initial_text_width', initial_text_width, 'scale_factor_width', scale_factor_width, 'new_text_width', new_text_width,
+          'initial_text_height', initial_text_height, 'scale_factor_height', scale_factor_height, 'new_text_height', new_text_height)
 
     # Ensure the font size is not less than 1
     return max(1, max_font_size), new_text_width, new_text_height
@@ -72,20 +74,58 @@ def get_random_text(len):
     return ''.join(random.choice(letters) for i in range(len))
 
 
-def load_texts(annotation_file):
+def generate_texts(content_zh, content_en, min_length=3, max_length=6):
+    # Select a random text
+    if random.random() < 0.8:
+        # Randomly choose a length between min_length and max_length
+        if random.random() < 0.5:
+            start_index = random.randint(0, len(content_zh) - min_length)
+            chosen_length = random.randint(min_length, max_length)
+            chosen_length = min(chosen_length, len(content_zh) - start_index)
+
+            text = content_zh[start_index:start_index + chosen_length]
+            flag_chinese = True
+        else:
+            start_index = random.randint(0, len(content_en) - min_length)
+            chosen_length = random.randint(min_length, max_length)
+            chosen_length = min(chosen_length, len(content_en) - start_index)
+
+            text = content_en[start_index:start_index + chosen_length]
+            flag_chinese = False
+    else:
+        text = get_random_text(random.randint(3, 10))
+        flag_chinese = False
+
+    return text, flag_chinese
+
+
+def load_texts():
     """
     Load texts from a text file.
     """
-    with open(annotation_file, 'r') as file:
-        annotations = json.load(file)
+    # Read the content of the file
+    annotation_file = 'nejm_test_zh.txt'
+    with open(annotation_file, 'r', encoding='utf-8') as file:
+        content_zh = file.read()
 
-    all_texts = {}
-    for id, annot in annotations.items():
-        if annot['illegibility'] == 'True' or annot['illegibility'] == 'true' \
-            or annot['illegibility'] == True or annot['transcription'] == '###' or len(annot['transcription']) < 2:
-            continue
-        all_texts[annot['transcription']] = annot['language']
-    return all_texts
+    annotation_file = 'nejm_test_en.txt'
+    with open(annotation_file, 'r', encoding='utf-8') as file:
+        content_en = file.read()
+
+    content_zh = content_zh.replace(' ', '').replace('\n', '')
+    content_en = content_en.replace(' ', '').replace('\n', '')
+    return content_zh, content_en
+
+    # with open(annotation_file, 'r') as file:
+    #     annotations = json.load(file)
+    #
+    # all_texts = {}
+    # for id, annot in annotations.items():
+    #     if annot['illegibility'] == 'True' or annot['illegibility'] == 'true' \
+    #         or annot['illegibility'] == True or annot['transcription'] == '###' or len(annot['transcription']) < 2:
+    #         continue
+    #     all_texts[annot['transcription']] = annot['language']
+    # return all_texts
 
 
 def gaussian(x, mu, sigma):
@@ -129,7 +169,7 @@ def render_clean_text_image(image_size, text, font_path, font_size, no_font=Fals
                     y = corner[1] + dy
                     if 0 <= x < image_size[0] and 0 <= y < image_size[1]:  # Check bounds
                         rect_draw.point((x, y), fill=color)
-                        # draw.point((x, y), fill=(150, 200, 10))
+                        draw.point((x, y), fill=(150, 200, 10))
     # rect_draw.rectangle([top_left, bottom_right], outline="white", width=2)
 
     # Create an image for the horizontal line
@@ -212,7 +252,7 @@ def render_clean_text_image_multilines(image_size, text, font_path_all_lines, fo
                                 new_intensity = min(255, current_color[0] + intensity)
                                 color = (new_intensity, new_intensity, new_intensity)
                                 rect_draw.point((x, y), fill=color)
-                                # draw.point((x, y), fill=(150, 200, 10))
+                                draw.point((x, y), fill=(150, 200, 10))
 
             # Midline for each line
             center_y = (top_left[1] + bottom_right[1]) // 2
@@ -360,7 +400,7 @@ def apply_random_curvatures(image, rectangle_img, line_img):
     return curved_image, curved_rectangle_img, curved_line_img
 
 
-def apply_random_transformations(image, rectangle_img, line_img, text_corners, max_rotation=60, perspective_variation=0.001, margin=96):
+def apply_random_transformations(image, rectangle_img, line_img, text_corners, max_rotation=60, perspective_variation=0.0005, margin=96):
     # Load image
     image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
     rectangle_img = cv2.cvtColor(np.array(rectangle_img), cv2.COLOR_RGB2BGR)
@@ -478,26 +518,12 @@ def overlay_on_random_background(transformed_text_img, image_folder):
     return background_img
 
 
-def generate_texts(texts):
-    # Select a random text
-    flag_chinese = False
-    if random.random() < 0.6:
-        text = random.choice(list(texts.keys()))  # TODO multi-lines
-        if texts[text] == 'Chinese' or texts[text] == 'chinese':
-            flag_chinese = True
-        # print('chosen text', text)
-    else:
-        text = get_random_text(random.randint(3, 10))
-        # print('random text', text)
-    return text, flag_chinese
-
-
-def generate_text_image_pairs(num_pairs, image_size, fonts_dir, output_dir, background_dir, annotation_file, offset=0, save_recovered=False):
+def generate_text_image_pairs(num_pairs, image_size, fonts_dir, output_dir, background_dir, offset=0, save_recovered=False):
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
     # Load all candidate texts from the annotation file
-    texts = load_texts(annotation_file)
+    content_zh, content_en = load_texts()
 
     previous_num_lines, previous_text_all_lines = None, None
 
@@ -508,14 +534,19 @@ def generate_text_image_pairs(num_pairs, image_size, fonts_dir, output_dir, back
             text_all_lines = ""
             font_path_all_lines = []
             font_size_all_lines = []
+            flag_chinese_all_lines = []
+            texts_all_lines = []
 
-            if random.random() < 0.4:
-                num_lines = random.randint(2, 4)
-            else:
-                num_lines = 1
+            # if random.random() < 0.3:
+            num_lines = random.randint(2, 4)
+            # else:
+            #     num_lines = 1
 
             for l in range(num_lines):
-                text, flag_chinese = generate_texts(texts)
+                text, flag_chinese = generate_texts(content_zh, content_en)
+                flag_chinese_all_lines.append(flag_chinese)
+                texts_all_lines.append(text)
+
                 if len(text) > 10:
                     text = text[:10]
                 if len(text_all_lines) == 0:
@@ -543,9 +574,9 @@ def generate_text_image_pairs(num_pairs, image_size, fonts_dir, output_dir, back
             font_size_all_lines = []
             for l in range(num_lines):
                 # Select a random font
-                font_path = load_fonts(fonts_dir, chinese=flag_chinese)
+                font_path = load_fonts(fonts_dir, chinese=flag_chinese_all_lines[l])
                 # print('text', text, 'font_path', font_path)
-                font_size, text_width, text_height = get_max_font_size(text, font_path, num_lines)
+                font_size, text_width, text_height = get_max_font_size(texts_all_lines[l], font_path, num_lines)
                 if font_size == -1:
                     continue
                 font_path_all_lines.append(font_path)
@@ -563,8 +594,9 @@ def generate_text_image_pairs(num_pairs, image_size, fonts_dir, output_dir, back
 
         # Render a curved, perspective transformed, noisy, and color jittered text
         # It is okay if transformed texts miss parts of their characters, because the meaning of texts do not matter
-        curved_text_img, curved_rectangle_img, curved_line_img = apply_random_transformations(clean_img, clean_rectangle_img, clean_line_img, corners)
-        curved_text_img, curved_rectangle_img, curved_line_img = apply_random_curvatures(curved_text_img, curved_rectangle_img, curved_line_img)
+        # curved_text_img, curved_rectangle_img, curved_line_img = apply_random_transformations(clean_img, clean_rectangle_img, clean_line_img, corners)
+        # curved_text_img, curved_rectangle_img, curved_line_img = apply_random_curvatures(curved_text_img, curved_rectangle_img, curved_line_img)
+        curved_text_img, curved_rectangle_img, curved_line_img = clean_img, clean_rectangle_img, clean_line_img
 
 
         if save_recovered:
@@ -631,12 +663,11 @@ def generate_text_image_pairs(num_pairs, image_size, fonts_dir, output_dir, back
 if __name__ == "__main__":
     # Parameters for generating the synthetic dataset
     offset = 0
-    num_pairs = 5-offset
+    num_pairs = 10-offset
     image_size = (512, 512)
     fonts_dir = "fonts"
     output_dir = "toy_examples"
     background_dir = "/tmp/datasets/coco/train2017"
-    annotation_file = "ArT/annots/train_annots.json"
 
     os.makedirs(output_dir + "/target", exist_ok=True)
     os.makedirs(output_dir + "/target_curved", exist_ok=True)
@@ -650,4 +681,4 @@ if __name__ == "__main__":
     os.makedirs(output_dir + "/fonts", exist_ok=True)
 
     # Generate the text image pairs
-    generate_text_image_pairs(num_pairs, image_size, fonts_dir, output_dir, background_dir, annotation_file, offset, save_recovered=False)
+    generate_text_image_pairs(num_pairs, image_size, fonts_dir, output_dir, background_dir, offset, save_recovered=False)

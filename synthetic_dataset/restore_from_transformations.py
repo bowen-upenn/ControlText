@@ -98,13 +98,15 @@ def detect_gaussian_corners(image, num_lines=1, curr_path=None):
             cY = int(M["m01"] / M["m00"])
             dots.append((cX, cY))
 
-    print('len(dots)', len(dots))
-    return dots
-    # if len(dots) == 4 * num_lines:
-    #     return dots
-    # else:
-    #     # print("Four corners must be detected, detected: {}".format(len(dots)))
-    #     return None
+    # return dots
+    if num_lines == 1:
+        if len(dots) == 4:
+            return dots
+        else:
+            # print("Four corners must be detected, detected: {}".format(len(dots)))
+            return None
+    else:
+        return dots
 
 
 def order_corners(curved_line_img, corners):

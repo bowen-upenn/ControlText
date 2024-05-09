@@ -45,6 +45,7 @@ nvidia-nccl-cu12==2.19.3
 nvidia-nvjitlink-cu12==12.4.127
 nvidia-nvtx-cu12==12.1.105
 oauthlib==3.2.2
+opencv-python==4.9.0.80
 packaging==24.0
 pandas==2.0.3
 pillow==10.3.0
@@ -63,6 +64,7 @@ requests==2.31.0
 requests-oauthlib==2.0.0
 rsa==4.9
 safetensors==0.4.3
+scipy==1.13.0
 six==1.16.0
 sympy==1.12
 tensorboard==2.14.0
