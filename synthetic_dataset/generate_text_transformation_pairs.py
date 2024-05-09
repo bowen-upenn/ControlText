@@ -62,11 +62,9 @@ def get_max_font_size(text, font_path, num_lines=1, max_margin=64, image_size=51
     # Calculate the maximum font size
     max_font_size = int(initial_font_size * scale_factor)
     new_text_width, new_text_height = get_text_dimensions(background, text, ImageFont.truetype(font_path, max_font_size))
-    print('initial_text_width', initial_text_width, 'scale_factor_width', scale_factor_width, 'new_text_width', new_text_width,
-          'initial_text_height', initial_text_height, 'scale_factor_height', scale_factor_height, 'new_text_height', new_text_height)
 
     # Ensure the font size is not less than 1
-    return max(1, max_font_size), new_text_width, new_text_height
+    return max(1, max_font_size - 3), new_text_width, new_text_height
 
 
 def get_random_text(len):
