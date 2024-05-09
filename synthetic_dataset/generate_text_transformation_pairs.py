@@ -6,10 +6,15 @@ import random
 import string
 from tqdm import tqdm
 from PIL import Image, ImageDraw, ImageFont, ImageEnhance, ImageOps, ImageColor
+from fontTools.ttLib import TTFont
 from typing import List, Any
 import math
 import torch
 import torch.nn.functional as F
+
+import warnings
+# Suppress specific warnings from fontTools
+warnings.filterwarnings("ignore", message="extra bytes in post.stringData array")
 
 from restore_from_transformations import *
 
@@ -30,6 +35,15 @@ def load_fonts(fonts_dir, chinese=False, popular_fonts=None, popular_font_weight
         return random.choices(all_fonts, weights, k=1)[0]
     else:
         return random.choice(all_fonts)
+
+
+def text_is_supported(font_path, text):
+    char = text[0]
+    font = TTFont(font_path)
+    for table in font['cmap'].tables:
+        if ord(char) in table.cmap:
+            return True
+    return False
 
 
 def get_text_dimensions(draw, text, font):
@@ -149,8 +163,8 @@ def render_clean_text_image(image_size, text, font_path, font_size, no_font=Fals
     circle_diameter = 10  # You can adjust the size of the circles here
     sigma = circle_diameter / 3  # Standard deviation for Gaussian blur
 
-    top_left = text_position
-    top_right = (text_position[0] + text_width, text_position[1])
+    top_left = (text_position[0], text_position[1] + 10)
+    top_right = (text_position[0] + text_width, text_position[1] + 10)
     bottom_left = (text_position[0], text_position[1] + text_height)
     bottom_right = (text_position[0] + text_width, text_position[1] + text_height)
     corners = [top_left, top_right, bottom_left, bottom_right]
@@ -167,8 +181,7 @@ def render_clean_text_image(image_size, text, font_path, font_size, no_font=Fals
                     y = corner[1] + dy
                     if 0 <= x < image_size[0] and 0 <= y < image_size[1]:  # Check bounds
                         rect_draw.point((x, y), fill=color)
-                        draw.point((x, y), fill=(150, 200, 10))
-    # rect_draw.rectangle([top_left, bottom_right], outline="white", width=2)
+                        # draw.point((x, y), fill=(150, 200, 10))
 
     # Create an image for the horizontal line
     line_img = Image.new('RGB', image_size, 'black')
@@ -230,8 +243,8 @@ def render_clean_text_image_multilines(image_size, text, font_path_all_lines, fo
             y += line_heights[i]
 
             # Gaussian points for each line
-            top_left = text_position
-            top_right = (text_position[0] + line_widths[i], text_position[1])
+            top_left = (text_position[0], text_position[1] + 10)
+            top_right = (text_position[0] + line_widths[i], text_position[1] + 10)
             bottom_left = (text_position[0], text_position[1] + line_heights[i])
             bottom_right = (text_position[0] + line_widths[i], text_position[1] + line_heights[i])
             corners = [top_left, top_right, bottom_left, bottom_right]
@@ -250,7 +263,7 @@ def render_clean_text_image_multilines(image_size, text, font_path_all_lines, fo
                                 new_intensity = min(255, current_color[0] + intensity)
                                 color = (new_intensity, new_intensity, new_intensity)
                                 rect_draw.point((x, y), fill=color)
-                                draw.point((x, y), fill=(150, 200, 10))
+                                # draw.point((x, y), fill=(150, 200, 10))
 
             # Midline for each line
             center_y = (top_left[1] + bottom_right[1]) // 2
@@ -535,10 +548,10 @@ def generate_text_image_pairs(num_pairs, image_size, fonts_dir, output_dir, back
             flag_chinese_all_lines = []
             texts_all_lines = []
 
-            # if random.random() < 0.3:
-            num_lines = random.randint(2, 4)
-            # else:
-            #     num_lines = 1
+            if random.random() < 0.3:
+                num_lines = random.randint(2, 4)
+            else:
+                num_lines = 1
 
             for l in range(num_lines):
                 text, flag_chinese = generate_texts(content_zh, content_en)
@@ -553,7 +566,12 @@ def generate_text_image_pairs(num_pairs, image_size, fonts_dir, output_dir, back
                     text_all_lines += '\n' + text
 
                 # Select a random font
-                font_path = load_fonts(fonts_dir, chinese=flag_chinese)
+                support = False
+                while not support:
+                    font_path = load_fonts(fonts_dir, chinese=flag_chinese)
+                    if text_is_supported(font_path, text):
+                        support = True
+
                 # print('text', text, 'font_path', font_path)
                 font_size, text_width, text_height = get_max_font_size(text, font_path, num_lines)
                 if font_size == -1:
@@ -572,13 +590,15 @@ def generate_text_image_pairs(num_pairs, image_size, fonts_dir, output_dir, back
             font_size_all_lines = []
             for l in range(num_lines):
                 # Select a random font
-                font_path = load_fonts(fonts_dir, chinese=flag_chinese_all_lines[l])
-                # print('text', text, 'font_path', font_path)
-                font_size, text_width, text_height = get_max_font_size(texts_all_lines[l], font_path, num_lines)
-                if font_size == -1:
-                    continue
-                font_path_all_lines.append(font_path)
-                font_size_all_lines.append(font_size)
+                font_path = ""
+                while font_path not in font_path_all_lines:
+                    font_path = load_fonts(fonts_dir, chinese=flag_chinese_all_lines[l])
+                    # print('text', text, 'font_path', font_path)
+                    font_size, text_width, text_height = get_max_font_size(texts_all_lines[l], font_path, num_lines)
+                    if not text_is_supported(font_path, texts_all_lines[l]) or font_path in font_path_all_lines or font_size == -1:
+                        continue
+                    font_path_all_lines.append(font_path)
+                    font_size_all_lines.append(font_size)
 
         # Render a clean text images
         if num_lines == 1:
@@ -592,10 +612,9 @@ def generate_text_image_pairs(num_pairs, image_size, fonts_dir, output_dir, back
 
         # Render a curved, perspective transformed, noisy, and color jittered text
         # It is okay if transformed texts miss parts of their characters, because the meaning of texts do not matter
-        # curved_text_img, curved_rectangle_img, curved_line_img = apply_random_transformations(clean_img, clean_rectangle_img, clean_line_img, corners)
-        # curved_text_img, curved_rectangle_img, curved_line_img = apply_random_curvatures(curved_text_img, curved_rectangle_img, curved_line_img)
-        curved_text_img, curved_rectangle_img, curved_line_img = clean_img, clean_rectangle_img, clean_line_img
-
+        curved_text_img, curved_rectangle_img, curved_line_img = apply_random_transformations(clean_img, clean_rectangle_img, clean_line_img, corners)
+        curved_text_img, curved_rectangle_img, curved_line_img = apply_random_curvatures(curved_text_img, curved_rectangle_img, curved_line_img)
+        # curved_text_img, curved_rectangle_img, curved_line_img = clean_img, clean_rectangle_img, clean_line_img
 
         if save_recovered:
             corners = detect_gaussian_corners(np.asarray(curved_rectangle_img), num_lines, os.path.join(output_dir + "/recovered", f"{text_subset_idx + offset}_{font_variation}"))
@@ -629,7 +648,6 @@ def generate_text_image_pairs(num_pairs, image_size, fonts_dir, output_dir, back
             corners = detect_gaussian_corners(np.asarray(curved_rectangle_img), num_lines)
             if corners is None:
                 continue    # ensure each image in our dataset has four valid corners being detected
-
 
         curved_text_img_target_path = os.path.join(output_dir + "/target_curved", f"{text_subset_idx + offset}_{font_variation}.png")
         curved_text_img.save(curved_text_img_target_path)
