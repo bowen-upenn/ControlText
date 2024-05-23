@@ -160,7 +160,7 @@ def render_clean_text_image(image_size, text, font_path, font_size, no_font=Fals
     # Create an image for the rectangle
     rectangle_img = Image.new('RGB', image_size, 'black')
     rect_draw = ImageDraw.Draw(rectangle_img)
-    circle_diameter = 10  # You can adjust the size of the circles here
+    circle_diameter = 20  # You can adjust the size of the circles here
     sigma = circle_diameter / 3  # Standard deviation for Gaussian blur
 
     top_left = (text_position[0], text_position[1] + 10)
@@ -192,7 +192,7 @@ def render_clean_text_image(image_size, text, font_path, font_size, no_font=Fals
     return clean_img, rectangle_img, line_img, corners
 
 
-def render_clean_text_image_multilines(image_size, text, font_path_all_lines, font_size_all_lines, annot_each_line=True):
+def render_clean_text_image_multilines(image_size, text, font_path_all_lines, font_size_all_lines, annot_each_line=False):
     """
     Render clean text centered on an image, supporting multiple lines.
     """
@@ -202,7 +202,7 @@ def render_clean_text_image_multilines(image_size, text, font_path_all_lines, fo
     rect_draw = ImageDraw.Draw(rectangle_img)
     line_img = Image.new('RGB', image_size, 'black')
     line_draw = ImageDraw.Draw(line_img)
-    circle_diameter = 10  # You can adjust the size of the circles here
+    circle_diameter = 20  # You can adjust the size of the circles here
     sigma = circle_diameter / 3  # Standard deviation for Gaussian blur
 
     # Split the text into lines
