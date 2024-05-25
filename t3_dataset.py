@@ -33,6 +33,8 @@ def insert_spaces(string, nSpace):
 
 
 def draw_glyph(font, text):
+    # This function creates an image with a single line of text that is centered and scaled to fit the image dimensions optimally
+    # TODO: perform our algorithms to recover texts and fonts from random perspective transformations and curvatures
     g_size = 50
     W, H = (512, 80)
     new_font = font.font_variant(size=g_size)
@@ -54,8 +56,11 @@ def draw_glyph(font, text):
 
 
 def draw_glyph2(font, text, polygon, vertAng=10, scale=1, width=512, height=512, add_space=True):
+    # This function is designed to fit text within the given polygon, considering rotations and potentially vertical orientation
+    # TODO: step 1: same as above in draw_glyph to recover texts and fonts
+    #       step 2: we know the box of the recovered texts, resize, recenter, and rotate it to fit the polygon
     enlarge_polygon = polygon*scale
-    rect = cv2.minAreaRect(enlarge_polygon)
+    rect = cv2.minAreaRect(enlarge_polygon) # a bounding rectangle that also considers the rotation
     box = cv2.boxPoints(rect)
     box = np.int0(box)
     w, h = rect[1]
@@ -304,24 +309,42 @@ class T3DataSet(Dataset):
                 pos_idxs = [cur_item['pos'][i] for i in sel_idxs]
             else:
                 pos_idxs = [-1 for i in sel_idxs]
+
             item_dict['caption'] = get_caption_pos(item_dict['caption'], pos_idxs, self.caption_pos_porb, self.place_holder)
             item_dict['polygons'] = [cur_item['polygons'][i] for i in sel_idxs]
-            item_dict['texts'] = [cur_item['texts'][i][:self.max_chars] for i in sel_idxs]
-            item_dict['language'] = [cur_item['language'][i] for i in sel_idxs]
-            # glyphs
-            for idx, text in enumerate(item_dict['texts']):
-                gly_line = draw_glyph(self.font, text)
-                glyphs = draw_glyph2(self.font, text, item_dict['polygons'][idx], scale=self.glyph_scale)
-                item_dict['glyphs'] += [glyphs]
-                item_dict['gly_line'] += [gly_line]
-            # mask_pos
-            for polygon in item_dict['polygons']:
-                item_dict['positions'] += [self.draw_pos(polygon, self.mask_pos_prob)]
+            item_dict['areas'] = [cv2.contourArea(cur_item['polygons'][i]) for i in sel_idxs]
+
+            # mask_pos, only draw the largest polygon
+            largest_area_idx = item_dict['areas'].index(largest_area)   # the index in sel_idxs
+            largest_polygon = item_dict['polygons'][largest_area_idx]
+            item_dict['positions'] += [self.draw_pos(largest_polygon, self.mask_pos_prob)]
+            # for polygon in item_dict['polygons']:
+            #     item_dict['positions'] += [self.draw_pos(polygon, self.mask_pos_prob)]
+
+            # glyphs, only draw the glyphs in the largest polygon
+            text_in_largest_polygon = item_dict['texts'][largest_area_idx]
+            gly_line = draw_glyph(self.font, text_in_largest_polygon)
+            glyphs = draw_glyph2(self.font, text_in_largest_polygon, largest_polygon, scale=self.glyph_scale)
+            item_dict['glyphs'] += [glyphs]
+            item_dict['gly_line'] += [gly_line]
+            # for idx, text in enumerate(item_dict['texts']):
+            #     gly_line = draw_glyph(self.font, text)
+            #     glyphs = draw_glyph2(self.font, text, item_dict['polygons'][idx], scale=self.glyph_scale)
+            #     item_dict['glyphs'] += [glyphs]
+            #     item_dict['gly_line'] += [gly_line]
+
+            # only keep the ones for the largest polygon
+            item_dict['texts'] = [cur_item['texts'][i][:self.max_chars] for i in sel_idxs if i == largest_area_idx]
+            item_dict['language'] = [cur_item['language'][i] for i in sel_idxs if i == largest_area_idx]
+            # item_dict['texts'] = [cur_item['texts'][i][:self.max_chars] for i in sel_idxs]
+            # item_dict['language'] = [cur_item['language'][i] for i in sel_idxs]
+
         # inv_mask
         invalid_polygons = cur_item['invalid_polygons'] if 'invalid_polygons' in cur_item else []
         if len(texts) > 0:
             invalid_polygons += [cur_item['polygons'][i] for i in unsel_idxs]
         item_dict['inv_mask'] = self.draw_inv_mask(invalid_polygons)
+
         item_dict['hint'] = self.get_hint(item_dict['positions'])
         if random.random() < self.mask_img_prob:
             # randomly generate 0~3 masks
