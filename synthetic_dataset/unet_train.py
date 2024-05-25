@@ -70,7 +70,7 @@ def training(gpu, args, train_subset, val_subset):
     # Build the UNet model
     unet_model = torch.hub.load('mateuszbuda/brain-segmentation-pytorch', 'unet',
                                 in_channels=3, out_channels=args['model']['out_channels'], init_features=32, pretrained=False)
-    base_model_final_channels = args['model']['out_channels'] if args['training']['step'] == 'extract' else args['model']['bottleneck_out_dim']
+    base_model_final_channels = args['model']['out_channels']
     unet_model = ModifiedUNet(unet_model, base_model_final_channels=base_model_final_channels, step=args['training']['step'], deformable=False)
     unet_model = DDP(unet_model).to(rank)
     unet_model.train()
@@ -84,8 +84,10 @@ def training(gpu, args, train_subset, val_subset):
     # Set up optimizer, scheduler, and loss functions
     optimizer = optim.AdamW(unet_model.parameters(), lr=args['training']['learning_rate'])
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=args['training']['patience'])
-    criterion = CombinedLoss(rank, bce_pos_weight=args['training']['bce_pos_weight'], bce_weight=args['training']['bce_weight'], dice_weight=args['training']['dice_weight'])
-    criterion_mse = nn.MSELoss()
+    if args['training']['step'] == 'extract':
+        criterion = CombinedLoss(rank, bce_pos_weight=args['training']['bce_pos_weight'], bce_weight=args['training']['bce_weight'], dice_weight=args['training']['dice_weight'])
+    else:
+        criterion = nn.MSELoss()
 
     # Training loop
     running_loss_total, running_loss_coef, running_loss_reg = 0.0, 0.0, 0.0
@@ -132,9 +134,10 @@ def training(gpu, args, train_subset, val_subset):
             if batch_idx % args['training']['print_every'] == 0 or batch_idx + 1 == len(train_loader):
                 print('Training Rank %d, epoch %d, batch %d, lr %.6f, loss %.6f' % (rank, epoch, batch_idx, optimizer.param_groups[0]['lr'], running_loss_total / (global_step + 1e-10)))
 
-            if batch_idx > 0 and batch_idx % args['training']['val_every'] == 0:
+            # if batch_idx > 0 and batch_idx % args['training']['val_every'] == 0:
+            if batch_idx + 1 == len(train_loader):
                 # Validation
-                val_loss = validation(args, unet_model, val_loader, criterion, epoch, writer, rank, batch_idx, step=args['training']['step'])
+                val_loss = validation(args, unet_model, val_loader, criterion, epoch, writer, rank)
 
                 # Aggregate validation loss across all GPUs for consistent learning rate scheduler update
                 torch.distributed.all_reduce(val_loss, op=torch.distributed.ReduceOp.SUM)
@@ -154,7 +157,7 @@ def training(gpu, args, train_subset, val_subset):
     print('FINISHED TRAINING\n')
 
 
-def validation(args, unet_model, val_loader, criterion, epoch, writer, rank, batch_idx, step):
+def validation(args, unet_model, val_loader, criterion, epoch, writer, rank):
     print('Start Validation... EPOCH %d / %d\n' % (epoch, args['training']['num_epochs']))
     unet_model.eval()
     val_loss = 0.0
@@ -162,11 +165,11 @@ def validation(args, unet_model, val_loader, criterion, epoch, writer, rank, bat
     with torch.no_grad():
         for val_batch_idx, val_batch in enumerate(tqdm(val_loader)):
             if args['training']['step'] == 'extract':
-                val_sources, val_targets = batch
+                val_sources, val_targets = val_batch
                 val_sources = val_sources.to(rank)
                 val_targets = val_targets.to(rank)
             else:
-                val_sources, val_target_corners, val_target_midlines = batch
+                val_sources, val_target_corners, val_target_midlines = val_batch
                 val_sources = val_sources.to(rank)
                 val_target_corners = val_target_corners.to(rank)
                 val_target_midlines = val_target_midlines.to(rank)
@@ -177,7 +180,7 @@ def validation(args, unet_model, val_loader, criterion, epoch, writer, rank, bat
             # Compute loss
             val_predictions = val_outputs.squeeze(dim=1)
             if args['training']['step'] == 'extract':
-                loss = criterion.forward(val_predictions, val_targets)
+                val_loss = criterion.forward(val_predictions, val_targets)
             else:
                 val_pred_corners = val_predictions[:, 0]
                 val_pred_midline = val_predictions[:, 1]
@@ -187,18 +190,18 @@ def validation(args, unet_model, val_loader, criterion, epoch, writer, rank, bat
             if val_batch_idx == 0 and rank == 0:
                 if args['training']['step'] == 'extract':
                     if epoch == 0:
-                        save_image(val_sources[0].cpu(), 'outputs/' + args['training']['step'] + '/source_' + step + '_' + str(rank) + '.png')
-                        save_image(val_targets[0].cpu(), 'outputs/' + args['training']['step'] + '/target_' + step + '_' + str(rank) + '.png')
+                        save_image(val_sources[0].cpu(), 'outputs/' + args['training']['step'] + '/source_' + args['training']['step'] + '_' + str(rank) + '.png')
+                        save_image(val_targets[0].cpu(), 'outputs/' + args['training']['step'] + '/target_' + args['training']['step'] + '_' + str(rank) + '.png')
 
-                    save_image(val_predictions[0].cpu(), 'outputs/predicted_' + str(epoch) + '_' + str(batch_idx) + '_' + step + '_' + str(rank) + '.png')
+                    save_image(val_predictions[0].cpu(), 'outputs/predicted_' + str(epoch) + '_' + args['training']['step'] + '_' + str(rank) + '.png')
                 else:
                     if epoch == 0:
-                        save_image(val_sources[0].cpu(), 'outputs/' + args['training']['step'] + '/source_' + step + '_' + str(rank) + '.png')
-                        save_image(val_target_corners[0].cpu(), 'outputs/' + args['training']['step'] + '/target_corners_' + step + '_' + str(rank) + '.png')
-                        save_image(val_target_midlines[0].cpu(), 'outputs/' + args['training']['step'] + '/target_midlines_' + step + '_' + str(rank) + '.png')
+                        save_image(val_sources[0].cpu(), 'outputs/' + args['training']['step'] + '/source_' + args['training']['step'] + '_' + str(rank) + '.png')
+                        save_image(val_target_corners[0].cpu(), 'outputs/' + args['training']['step'] + '/target_corners_' + args['training']['step'] + '_' + str(rank) + '.png')
+                        save_image(val_target_midlines[0].cpu(), 'outputs/' + args['training']['step'] + '/target_midlines_' + args['training']['step'] + '_' + str(rank) + '.png')
 
-                    save_image(val_pred_corners[0].cpu(), 'outputs/predicted_corners_' + str(epoch) + '_' + str(batch_idx) + '_' + step + '_' + str(rank) + '.png')
-                    save_image(val_pred_midline[0].cpu(), 'outputs/predicted_midline_' + str(epoch) + '_' + str(batch_idx) + '_' + step + '_' + str(rank) + '.png')
+                    save_image(val_pred_corners[0].cpu(), 'outputs/' + args['training']['step'] + '/predicted_corners_' + str(epoch) + '_' + str(rank) + '.png')
+                    save_image(val_pred_midline[0].cpu(), 'outputs/' + args['training']['step'] + '/predicted_midline_' + str(epoch) + '_' + str(rank) + '.png')
 
     val_loss /= len(val_loader)
 
@@ -236,8 +239,9 @@ if __name__ == "__main__":
     args['training']['step'] = cmd_args.step if cmd_args.step is not None else args['training']['step']
 
     # Load dataset
-    full_dataset = SyntheticDataset(args['dataset']['images_dir'], args['dataset']['targets_dir'], args['dataset']['targets_curved_dir'],
-                                    args['dataset']['coeffs_dir'], args['dataset']['image_size'], args['training']['step'])
+
+    full_dataset = SyntheticDataset(args['dataset']['images_dir'], args['dataset']['targets_curved_dir'], args['dataset']['target_corners_dir'],
+                                    args['dataset']['target_midlines_dir'], args['dataset']['image_size'], args['training']['step'])
     train_subset_idx = torch.randperm(len(full_dataset))[:int(args['dataset']['percent_train'] * args['dataset']['train_val_split'] * len(full_dataset))]
     val_subset_idx = torch.randperm(len(full_dataset))[:int(args['dataset']['percent_valid'] * (1 - args['dataset']['train_val_split']) * len(full_dataset))]
     train_subset = Subset(full_dataset, train_subset_idx)

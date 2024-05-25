@@ -2,7 +2,8 @@ dataset:
   images_dir: 'test_dataset/source'
   targets_dir: 'test_dataset/target'
   targets_curved_dir: 'test_dataset/target_curved'
-  coeffs_dir: 'test_dataset/coeffs'
+  target_corners_dir: 'test_dataset/corners'
+  target_midlines_dir: 'test_dataset/midline'
   image_size: 512
   train_val_split: 0.95
   percent_train: 1 #0.001
@@ -20,9 +21,9 @@ training:
   patience: 10
   start_epoch: 0
   test_epoch: 15
-  num_epochs: 100
-  print_every: 300
-  val_every: 700
+  num_epochs: 20
+  print_every: 100
+  val_every: 500
   lambda_loss_color_map: 1
   bce_pos_weight: 1
   bce_weight: 0.3

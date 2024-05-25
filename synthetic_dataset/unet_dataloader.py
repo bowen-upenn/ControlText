@@ -30,19 +30,19 @@ class SyntheticDataset(Dataset):
     def __getitem__(self, idx):
         img_name = self.images[idx]
 
-        if step == 'extract':
+        if self.step == 'extract':
             source_path = os.path.join(self.sources_dir, img_name)
             target_path = os.path.join(self.targets_dir, img_name)
 
             source = Image.open(source_path).convert('RGB')
-            target = Image.open(target_path).convert('RGB')
+            target = Image.open(target_path).convert('L')
 
             if self.transform is not None:
                 source = self.transform(source)
                 target = self.transform(target)
 
             # Process the target image to extract the binary mask of the texts
-            target = (target != 0).any(axis=0).float()
+            target = (target != 0).squeeze(0).float()
             return source, target
         else:
             source_path = os.path.join(self.sources_dir, img_name)
@@ -50,8 +50,8 @@ class SyntheticDataset(Dataset):
             target_midlines_path = os.path.join(self.target_midlines_dir, img_name)
 
             source = Image.open(source_path).convert('RGB')
-            target_corners = Image.open(target_corners_path).convert('RGB')
-            target_midlines = Image.open(target_midlines_path).convert('RGB')
+            target_corners = Image.open(target_corners_path).convert('L')
+            target_midlines = Image.open(target_midlines_path).convert('L')
 
             if self.transform is not None:
                 source = self.transform(source)
@@ -60,7 +60,7 @@ class SyntheticDataset(Dataset):
 
             # Process the target image to extract the binary mask of the texts
             source = (source != 0).any(axis=0).float().unsqueeze(0).repeat(3, 1, 1)
-            target_corners = (target_corners != 0).any(axis=0).float()
-            target_midlines = (target_midlines != 0).any(axis=0).float()
+            target_corners = target_corners.squeeze(0).float()
+            target_midlines = target_midlines.squeeze(0).float()
 
             return source, target_corners, target_midlines
