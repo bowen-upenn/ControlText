@@ -100,10 +100,11 @@ def training(gpu, args, train_subset, val_subset):
                 sources = sources.to(rank)
                 targets = targets.to(rank)
             else:
-                sources, target_corners, target_midlines = batch
+                sources, target_corners, target_midlines, target_midline_endpoints = batch
                 sources = sources.to(rank)
                 target_corners = target_corners.to(rank)
                 target_midlines = target_midlines.to(rank)
+                target_midline_endpoints = target_midline_endpoints.to(rank)
 
             # Forward pass
             outputs = unet_model(sources)
@@ -116,8 +117,10 @@ def training(gpu, args, train_subset, val_subset):
             else:
                 pred_corners = predictions[:, 0]
                 pred_midline = predictions[:, 1]
+                pred_midline_endpoints = predictions[:, 2]
 
-                loss = criterion.forward(pred_corners, target_corners) + criterion.forward(pred_midline, target_midlines)
+                loss = criterion.forward(pred_corners, target_corners) + \
+                       criterion.forward(pred_midline, target_midlines) + criterion.forward(pred_midline_endpoints, target_midline_endpoints)
                 running_loss_total += loss.item()
 
             # Backward pass
@@ -169,10 +172,11 @@ def validation(args, unet_model, val_loader, criterion, epoch, writer, rank):
                 val_sources = val_sources.to(rank)
                 val_targets = val_targets.to(rank)
             else:
-                val_sources, val_target_corners, val_target_midlines = val_batch
+                val_sources, val_target_corners, val_target_midlines, val_target_midline_endpoints = val_batch
                 val_sources = val_sources.to(rank)
                 val_target_corners = val_target_corners.to(rank)
                 val_target_midlines = val_target_midlines.to(rank)
+                val_target_midline_endpoints = val_target_midline_endpoints.to(rank)
 
             # Forward pass
             val_outputs = unet_model(val_sources)
@@ -184,8 +188,10 @@ def validation(args, unet_model, val_loader, criterion, epoch, writer, rank):
             else:
                 val_pred_corners = val_predictions[:, 0]
                 val_pred_midline = val_predictions[:, 1]
+                val_pred_midline_endpoints = val_predictions[:, 2]
 
-                val_loss += criterion.forward(val_pred_corners, val_target_corners) + criterion.forward(val_pred_midline, val_target_midlines)
+                val_loss += criterion.forward(val_pred_corners, val_target_corners) \
+                            + criterion.forward(val_pred_midline, val_target_midlines) + criterion.forward(val_pred_midline_endpoints, val_target_midline_endpoints)
 
             if val_batch_idx == 0 and rank == 0:
                 if args['training']['step'] == 'extract':
@@ -199,9 +205,11 @@ def validation(args, unet_model, val_loader, criterion, epoch, writer, rank):
                         save_image(val_sources[0].cpu(), 'outputs/' + args['training']['step'] + '/source_' + args['training']['step'] + '_' + str(rank) + '.png')
                         save_image(val_target_corners[0].cpu(), 'outputs/' + args['training']['step'] + '/target_corners_' + args['training']['step'] + '_' + str(rank) + '.png')
                         save_image(val_target_midlines[0].cpu(), 'outputs/' + args['training']['step'] + '/target_midlines_' + args['training']['step'] + '_' + str(rank) + '.png')
+                        save_image(val_target_midline_endpoints[0].cpu(), 'outputs/' + args['training']['step'] + '/target_midline_endpoints_' + args['training']['step'] + '_' + str(rank) + '.png')
 
                     save_image(val_pred_corners[0].cpu(), 'outputs/' + args['training']['step'] + '/predicted_corners_' + str(epoch) + '_' + str(rank) + '.png')
                     save_image(val_pred_midline[0].cpu(), 'outputs/' + args['training']['step'] + '/predicted_midline_' + str(epoch) + '_' + str(rank) + '.png')
+                    save_image(val_pred_midline_endpoints[0].cpu(), 'outputs/' + args['training']['step'] + '/predicted_midline_endpoints_' + str(epoch) + '_' + str(rank) + '.png')
 
     val_loss /= len(val_loader)
 

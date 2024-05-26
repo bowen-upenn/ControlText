@@ -21,7 +21,7 @@ training:
   patience: 10
   start_epoch: 0
   test_epoch: 15
-  num_epochs: 20
+  num_epochs: 40
   print_every: 100
   val_every: 500
   lambda_loss_color_map: 1

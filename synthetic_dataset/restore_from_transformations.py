@@ -15,7 +15,7 @@ from scipy.ndimage import map_coordinates
 
 
 # Recover from random curvatures
-def find_min_max_x_coordinates(image):
+def find_min_max_coordinates(image):
     """Find the non-black pixel with min and max x coordinates."""
     image = np.array(image)
     y_indices, x_indices = np.nonzero(np.any(image > 0, axis=-1))
@@ -111,7 +111,7 @@ def detect_gaussian_corners(image, num_lines=1, curr_path=None):
 
 def order_corners(curved_line_img, corners):
     # Find the curved line
-    midline_start, midline_end = find_min_max_x_coordinates(curved_line_img)
+    midline_start, midline_end = find_min_max_coordinates(curved_line_img)
     above_line = np.array([check_if_point_is_above_the_line(corner, midline_start, midline_end) for corner in corners])
 
     # top left is the corner point above the midline with the smaller x coordinate

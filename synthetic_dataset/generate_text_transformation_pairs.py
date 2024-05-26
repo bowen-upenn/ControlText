@@ -631,7 +631,7 @@ def generate_text_image_pairs(num_pairs, image_size, fonts_dir, output_dir, back
                 recovered_line_img_path = os.path.join(output_dir + "/recovered", f"{text_subset_idx + offset}_{font_variation}_line_after_persp.png")
                 Image.fromarray(corrected_line_img).save(recovered_line_img_path)
 
-                midline_start, midline_end = find_min_max_x_coordinates(corrected_line_img)
+                midline_start, midline_end = find_min_max_coordinates(corrected_line_img)
                 straight_line_img = Image.new("RGB", image_size, (0, 0, 0))
                 draw = ImageDraw.Draw(straight_line_img)
                 draw.line([midline_start, midline_end], fill=(255, 255, 255), width=2)

@@ -34,7 +34,7 @@ class ModifiedUNet(nn.Module):
         if step == 'extract':
             self.prediction_head = nn.Conv2d(in_channels=base_model_final_channels, out_channels=1, kernel_size=1)  # sigmoid is in nn.BCEWithLogitsLoss
         elif step == 'rectify':
-            self.prediction_head = nn.Conv2d(in_channels=base_model_final_channels, out_channels=2, kernel_size=1)
+            self.prediction_head = nn.Conv2d(in_channels=base_model_final_channels, out_channels=3, kernel_size=1)
         else:
             raise ValueError('step must be either "extract" or "rectify"')
         # self.color_map_head = nn.Conv2d(in_channels=self.base_model_final_channels, out_channels=3, kernel_size=1)
