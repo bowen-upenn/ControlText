@@ -8,6 +8,8 @@ from PIL import Image, ImageDraw, ImageFont
 from torch.utils.data import Dataset, DataLoader
 from dataset_util import load, show_bbox_on_image
 
+from synthetic_dataset.unet_models import ModifiedUNet
+
 
 phrase_list = [
     ', content and position of the texts are ',
@@ -53,6 +55,30 @@ def draw_glyph(font, text):
     draw.text((x, y), text, font=new_font, fill='white')
     img = np.expand_dims(np.array(img), axis=2).astype(np.float64)
     return img
+
+
+def draw_glyph_font_aware(img, mask, unet_model_extract, unet_model_rectify):
+    if torch.distributed.is_initialized():
+        current_rank = torch.distributed.get_rank()
+    else:
+        current_rank = 0  # Assuming it's the primary device or not using distributed training
+
+    with torch.no_grad():
+        # Extract texts from the background image
+        img_text_only = unet_model_extract(img.to(current_rank))
+        img_text_only = img_text_only[mask].cpu().numpy()   # only keep the text region corresponding to the largest polygon
+
+        # Recover the texts from perspective transformations and curvatures
+        predictions = unet_model_rectify(img_text_only.to(current_rank))
+        pred_corners = predictions[:, 0].cpu().numpy()
+        pred_midline = predictions[:, 1].cpu().numpy()
+        pred_midline_endpoints = predictions[:, 2].cpu().numpy()
+
+        recovered_texts = recover_texts(img_text_only, pred_corners, pred_midline, pred_midline_endpoints, image_size=(512, 512), text_size=(512*0.9, 80*0.9))
+        print('recovered_texts before', recovered_texts.shape)
+        recovered_texts = np.expand_dims(recovered_texts, axis=2).astype(np.float64)
+        print('recovered_texts after', recovered_texts.shape)
+        return recovered_texts
 
 
 def draw_glyph2(font, text, polygon, vertAng=10, scale=1, width=512, height=512, add_space=True):
@@ -125,6 +151,54 @@ def draw_glyph2(font, text, polygon, vertAng=10, scale=1, width=512, height=512,
     img.paste(rotated_layer, (x_offset, y_offset), rotated_layer)
     img = np.expand_dims(np.array(img.convert('1')), axis=2).astype(np.float64)
     return img
+
+
+def draw_glyph2_font_aware(img, mask, polygon, unet_model_extract, unet_model_rectify):
+    enlarge_polygon = polygon * scale
+    rect = cv2.minAreaRect(enlarge_polygon)  # a bounding rectangle that also considers the rotation
+    box = cv2.boxPoints(rect)
+    box = np.int0(box)
+    w, h = rect[1]
+    angle = rect[2]
+
+    if angle < -45:
+        angle += 90
+    angle = -angle
+    if w < h:
+        angle += 90
+
+    # Call draw_glyph_font_aware to get recovered texts
+    recovered_texts = draw_glyph_font_aware(img, mask, unet_model_extract, unet_model_rectify)
+
+    # Prepare image canvas
+    img_height, img_width = img.shape[:2]
+    img_canvas = Image.new('RGB', (img_width, img_height), 'black')
+    draw = ImageDraw.Draw(img_canvas)
+
+    # Resize the text image to fit the bounding box
+    text_img = Image.fromarray((recovered_texts.squeeze() * 255).astype(np.uint8))
+    text_img = text_img.resize((int(w), int(h)))
+
+    # Calculate the translation to center the text within the bounding rectangle
+    center_x, center_y = rect[0]
+    text_width, text_height = text_img.size
+    top_left_x = center_x - text_width // 2
+    top_left_y = center_y - text_height // 2
+
+    # Create a rotated layer
+    rotated_layer = Image.new('RGBA', (img_width, img_height), (0, 0, 0, 0))
+    layer_draw = ImageDraw.Draw(rotated_layer)
+    rotated_layer.paste(text_img, (int(top_left_x), int(top_left_y)))
+
+    # Rotate the entire layer to align with the polygon
+    rotated_layer = rotated_layer.rotate(angle, expand=True, center=(center_x, center_y))
+
+    # Combine rotated text with the original image
+    img_canvas.paste(rotated_layer, (0, 0), rotated_layer)
+
+    return np.array(img_canvas)
+
+
 
 
 def get_caption_pos(ori_caption, pos_idxs, prob=1.0, place_holder='*'):
@@ -225,6 +299,39 @@ class T3DataSet(Dataset):
         if self.debug:
             self.tmp_items = [i for i in range(100)]
 
+        self.unet_model_extract, self.unet_model_rectify = self.setup_model_to_recover_condition_maps()
+
+    def setup_model_to_recover_condition_maps(self):
+        def _load_unet_model(unet_args, current_rank, step):
+            # Build the UNet model
+            unet_model = torch.hub.load('mateuszbuda/brain-segmentation-pytorch', 'unet',
+                                        in_channels=3, out_channels=unet_args['model']['out_channels'], init_features=32, pretrained=False)
+            base_model_final_channels = unet_args['model']['out_channels']
+            unet_model = ModifiedUNet(unet_model, base_model_final_channels=base_model_final_channels, step=step, deformable=False)
+            unet_model = unet_model.to(current_rank)
+            unet_model.eval()
+
+            map_location = {'cuda:%d' % current_rank: 'cuda:%d' % 0}
+            unet_model.load_state_dict(torch.load(unet_args['training']['checkpoint_path'] + '/unet_model_' + str(unet_args['training']['test_epoch'] - 1) +
+                                                  '_' + step + '.pth', map_location=map_location))
+            print('Loaded checkpoint from %s. Step %s' % (unet_args['training']['checkpoint_path'], step))
+            return unet_model
+
+        try:
+            with open('synthetic_dataset/unet_train_config.yaml', 'r') as file:
+                unet_args = yaml.safe_load(file)
+        except Exception as e:
+            print('Error reading the unet config file')
+
+        if torch.distributed.is_initialized():
+            current_rank = torch.distributed.get_rank()
+        else:
+            current_rank = 0  # Assuming it's the primary device or not using distributed training
+
+        unet_model_extract = _load_unet_model(unet_args, current_rank, step='extract')
+        unet_model_rectify = _load_unet_model(unet_args, current_rank, step='rectify')
+        return unet_model_extract, unet_model_rectify
+
     def load_data(self, json_path, percent):
         tic = time.time()
         content = load(json_path)
@@ -322,9 +429,13 @@ class T3DataSet(Dataset):
             #     item_dict['positions'] += [self.draw_pos(polygon, self.mask_pos_prob)]
 
             # glyphs, only draw the glyphs in the largest polygon
-            text_in_largest_polygon = item_dict['texts'][largest_area_idx]
-            gly_line = draw_glyph(self.font, text_in_largest_polygon)
-            glyphs = draw_glyph2(self.font, text_in_largest_polygon, largest_polygon, scale=self.glyph_scale)
+            largest_polygon_mask = self.draw_inv_mask([largest_polygon])
+            gly_line = draw_glyph_font_aware(target, largest_polygon_mask, self.unet_model_extract, self.unet_model_rectify)
+            glyphs = draw_glyph2_font_aware(target, largest_polygon_mask, largest_polygon, self.unet_model_extract, self.unet_model_rectify)
+
+            # text_in_largest_polygon = item_dict['texts'][largest_area_idx]
+            # gly_line = draw_glyph(self.font, text_in_largest_polygon)
+            # glyphs = draw_glyph2(self.font, text_in_largest_polygon, largest_polygon, scale=self.glyph_scale)
             item_dict['glyphs'] += [glyphs]
             item_dict['gly_line'] += [gly_line]
             # for idx, text in enumerate(item_dict['texts']):

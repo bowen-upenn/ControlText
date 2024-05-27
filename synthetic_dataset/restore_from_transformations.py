@@ -73,7 +73,7 @@ def correct_curvature(curve_text_img, curved_line_img, image_size, p1, p2):
 
 
 # Recover from random perspective transformations
-def detect_gaussian_corners(image, num_lines=1, curr_path=None):
+def detect_gaussian_corners(image, num_lines=1, for_midline_endpoints=False, curr_path=None):
     # Step 1: Load image and convert to grayscale
     gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
@@ -99,7 +99,7 @@ def detect_gaussian_corners(image, num_lines=1, curr_path=None):
             dots.append((cX, cY))
 
     # return dots
-    if num_lines == 1:
+    if num_lines == 1 and not for_midline_endpoints:
         if len(dots) == 4:
             return dots
         else:
@@ -156,6 +156,30 @@ def perform_perspective_transform(image, image_size, src_points, dst_points):
     transformed_img = cv2.warpPerspective(image, matrix, (image_size[0], image_size[1]))
     return transformed_img
 
+
+# Recover from random perspective transformations and curvatures
+def recover_texts(curved_text_img, pred_corners, pred_midline, pred_midline_endpoints, image_size, text_size):
+    # Detect four corners in the original image
+    source_corners = detect_gaussian_corners(pred_corners, num_lines=1)
+    if source_corners is not None:
+        # Recover from the perspective transformations
+        source_corners = order_corners(np.asarray(pred_midline), source_corners)
+        text_width, text_height = text_size
+        target_corners = create_rectangle(image_size, text_width, text_height)
+        corrected_image = perform_perspective_transform(curved_text_img, image_size, source_corners, target_corners)
+        corrected_midline = perform_perspective_transform(pred_midlines, image_size, source_corners, target_corners)
+        corrected_midline_endpoints = perform_perspective_transform(pred_midline_endpoints, image_size, source_corners, target_corners)
+
+        # Recover from the curvatures
+        endpoints = detect_gaussian_corners(corrected_midline_endpoints, num_lines=1, for_midline_endpoints=True)
+        if endpoints is not None:
+            midline_start, midline_end = endpoints[0], endpoints[1]
+            corrected_image = correct_curvature(corrected_image, corrected_midline, image_size, midline_start, midline_end)
+            return corrected_image
+        else:
+            return None
+    else:
+        return None
 
 if __name__ == "__main__":
     output_dir = "toy_examples"
