@@ -11,6 +11,7 @@ import yaml
 import torch
 
 from synthetic_dataset.unet_models import ModifiedUNet
+from synthetic_dataset.restore_from_transformations import recover_texts
 
 
 phrase_list = [
@@ -314,7 +315,7 @@ class T3DataSet(Dataset):
             unet_model.eval()
 
             map_location = {'cuda:%d' % current_rank: 'cuda:%d' % 0}
-            unet_model.load_state_dict(torch.load(unet_args['training']['checkpoint_path'] + '/unet_model_' + str(unet_args['training']['test_epoch'] - 1) +
+            unet_model.load_state_dict(torch.load(unet_args['training']['checkpoint_path'] + '/unet_model_' + str(unet_args['training']['ckpt_epoch_'+step]) +
                                                   '_' + step + '.pth', map_location=map_location))
             print('Loaded checkpoint from %s. Step %s' % (unet_args['training']['checkpoint_path'], step))
             return unet_model

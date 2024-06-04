@@ -5,6 +5,7 @@ from torchvision import transforms
 from PIL import Image, ImageDraw
 import numpy as np
 import math
+import cv2
 
 from generate_text_transformation_pairs import gaussian
 from restore_from_transformations import find_min_max_coordinates
@@ -57,6 +58,7 @@ class SyntheticDataset(Dataset):
             target_corners = Image.open(target_corners_path).convert('L')
             target_midlines = Image.open(target_midlines_path)
             target_midline_endpoints = self.draw_end_points(source.size, target_midlines)
+            target_midlines = self.convert_line_to_gaussian(target_midlines)
             target_midlines = target_midlines.convert('L')
 
             if self.transform is not None:
@@ -80,7 +82,7 @@ class SyntheticDataset(Dataset):
         # Create an image for the rectangle
         end_points_img = Image.new('L', image_size, 'black')
         rect_draw = ImageDraw.Draw(end_points_img)
-        circle_diameter = 10  # You can adjust the size of the circles here
+        circle_diameter = 20  # You can adjust the size of the circles here
         sigma = circle_diameter / 3  # Standard deviation for Gaussian blur
 
         ends = [midline_start, midline_end]
@@ -98,3 +100,13 @@ class SyntheticDataset(Dataset):
                             rect_draw.point((x, y), fill=intensity)
 
         return np.array(end_points_img)
+
+
+    def convert_line_to_gaussian(self, target_midline):
+        target_midline = np.array(target_midline)
+        blurred_midline = cv2.GaussianBlur(target_midline, (15, 15), 0)
+        # blurred_midline = blurred_midline + target_midline
+        # blurred_midline[blurred_midline > 255] = 255
+        blurred_midline = Image.fromarray(blurred_midline)
+        # blurred_midline = Image.fromarray(blurred_midline.astype(np.uint8))
+        return blurred_midline

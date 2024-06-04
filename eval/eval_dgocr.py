@@ -23,13 +23,13 @@ def parse_args():
     parser.add_argument(
         "--img_dir",
         type=str,
-        default='/home/yuxiang.tyx/projects/ControlNet/controlnet_wukong_generated',
+        default='/tmp/datasets/AnyWord-3M/anytext_eval_imgs/anytext_v1.1_laion_generated',
         help='path of generated images for eval'
     )
     parser.add_argument(
         "--input_json",
         type=str,
-        default='/data/vdb/yuxiang.tyx/AIGC/data/wukong_word/test1k.json',
+        default='/tmp/datasets/AnyWord-3M/AnyText-Benchmark/benchmark/laion_word/test1k.json',
         help='json path for evaluation dataset'
     )
     args = parser.parse_args()
@@ -48,7 +48,13 @@ elif 'laion' in input_json:
 
 
 def get_ld(ls1, ls2):
-    edit_dist = Levenshtein.distance(ls1, ls2)
+    # Convert lists of integers to strings
+    str1 = ''.join(map(str, ls1))
+    str2 = ''.join(map(str, ls2))
+
+    # Calculate Levenshtein distance
+    edit_dist = Levenshtein.distance(str1, str2)
+    # edit_dist = Levenshtein.distance(ls1, ls2)
     return 1 - edit_dist/(max(len(ls1), len(ls2)) + 1e-5)
 
 
@@ -132,6 +138,7 @@ def main():
                         sen_acc += [1]
                     else:
                         sen_acc += [0]
+
                     edit_dist += [get_ld(pred_order, gt_order)]
                     if PRINT_DEBUG:
                         print(f'pred/gt="{pred_text}"/"{gt_texts[k]}", ed={edit_dist[-1]:.4f}')
