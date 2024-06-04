@@ -305,35 +305,49 @@ class T3DataSet(Dataset):
         self.unet_model_extract, self.unet_model_rectify = self.setup_model_to_recover_condition_maps()
 
     def setup_model_to_recover_condition_maps(self):
-        def _load_unet_model(unet_args, current_rank, step):
-            # Build the UNet model
-            unet_model = torch.hub.load('mateuszbuda/brain-segmentation-pytorch', 'unet',
-                                        in_channels=3, out_channels=unet_args['model']['out_channels'], init_features=32, pretrained=False)
-            base_model_final_channels = unet_args['model']['out_channels']
-            unet_model = ModifiedUNet(unet_model, base_model_final_channels=base_model_final_channels, step=step, deformable=False)
-            unet_model = unet_model.to(current_rank)
-            unet_model.eval()
+        with torch.no_grad():
+            def _remove_module_prefix(state_dict):
+                # if the unet is trained using DDP, the model is saved with "module." prefix
+                new_state_dict = {}
+                for key, value in state_dict.items():
+                    if key.startswith("module."):
+                        new_key = key[7:]  # Remove the "module." prefix
+                    else:
+                        new_key = key
+                    new_state_dict[new_key] = value
+                return new_state_dict
 
-            map_location = {'cuda:%d' % current_rank: 'cuda:%d' % 0}
-            unet_model.load_state_dict(torch.load(unet_args['training']['checkpoint_path'] + '/unet_model_' + str(unet_args['training']['ckpt_epoch_'+step]) +
-                                                  '_' + step + '.pth', map_location=map_location))
-            print('Loaded checkpoint from %s. Step %s' % (unet_args['training']['checkpoint_path'], step))
-            return unet_model
+            def _load_unet_model(unet_args, current_rank, step):
+                # Build the UNet model
+                unet_model = torch.hub.load('mateuszbuda/brain-segmentation-pytorch', 'unet',
+                                            in_channels=3, out_channels=unet_args['model']['out_channels'], init_features=32, pretrained=False)
+                base_model_final_channels = unet_args['model']['out_channels']
+                unet_model = ModifiedUNet(unet_model, base_model_final_channels=base_model_final_channels, step=step, deformable=False)
+                unet_model = unet_model.to(current_rank)
+                unet_model.eval()
 
-        try:
-            with open('synthetic_dataset/unet_train_config.yaml', 'r') as file:
-                unet_args = yaml.safe_load(file)
-        except Exception as e:
-            print('Error reading the unet config file')
+                map_location = {'cuda:%d' % current_rank: 'cuda:%d' % 0}
+                checkpoint = torch.load('synthetic_dataset/' + unet_args['training']['checkpoint_path'] + '/unet_model_' + step + '_' +
+                                         str(unet_args['training']['ckpt_epoch_'+step]) + '.pth', map_location=map_location)
+                checkpoint = _remove_module_prefix(checkpoint)
+                unet_model.load_state_dict(checkpoint)
+                print('Loaded checkpoint from %s. Step %s' % (unet_args['training']['checkpoint_path'], step))
+                return unet_model
 
-        if torch.distributed.is_initialized():
-            current_rank = torch.distributed.get_rank()
-        else:
-            current_rank = 0  # Assuming it's the primary device or not using distributed training
+            try:
+                with open('synthetic_dataset/unet_train_config.yaml', 'r') as file:
+                    unet_args = yaml.safe_load(file)
+            except Exception as e:
+                print('Error reading the unet config file')
 
-        unet_model_extract = _load_unet_model(unet_args, current_rank, step='extract')
-        unet_model_rectify = _load_unet_model(unet_args, current_rank, step='rectify')
-        return unet_model_extract, unet_model_rectify
+            if torch.distributed.is_initialized():
+                current_rank = torch.distributed.get_rank()
+            else:
+                current_rank = 0  # Assuming it's the primary device or not using distributed training
+
+            unet_model_extract = _load_unet_model(unet_args, current_rank, step='extract')
+            unet_model_rectify = _load_unet_model(unet_args, current_rank, step='rectify')
+            return unet_model_extract, unet_model_rectify
 
     def load_data(self, json_path, percent):
         tic = time.time()
@@ -425,7 +439,8 @@ class T3DataSet(Dataset):
             item_dict['areas'] = [cv2.contourArea(cur_item['polygons'][i]) for i in sel_idxs]
 
             # mask_pos, only draw the largest polygon
-            largest_area_idx = item_dict['areas'].index(largest_area)   # the index in sel_idxs
+            # find the index of the largest area
+            largest_area_idx = item_dict['areas'].index(max(item_dict['areas']))   # the index in sel_idxs
             largest_polygon = item_dict['polygons'][largest_area_idx]
             item_dict['positions'] += [self.draw_pos(largest_polygon, self.mask_pos_prob)]
             # for polygon in item_dict['polygons']:

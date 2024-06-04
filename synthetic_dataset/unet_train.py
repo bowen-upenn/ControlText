@@ -151,7 +151,7 @@ def training(gpu, args, train_subset, val_subset):
 
         # Save model checkpoint every epoch
         if rank == 0:
-            torch.save(unet_model.state_dict(), args['training']['checkpoint_path'] + '/unet_model_' + args['training']['step'] + '_' + str(epoch) + '_' + args['training']['step'] + '.pth')
+            torch.save(unet_model.state_dict(), args['training']['checkpoint_path'] + '/unet_model_' + args['training']['step'] + '_' + str(epoch) + '.pth')
         dist.monitored_barrier()
 
     dist.destroy_process_group()  # clean up

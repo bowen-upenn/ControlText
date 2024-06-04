@@ -10,10 +10,10 @@ import shutil
 
 NUM_NODES = 1
 # Configs
-batch_size = 4  # default 6
-grad_accum = 1  # enable perceptual loss may cost a lot of VRAM, you can set a smaller batch_size and make sure grad_accum * batch_size = 6
-ckpt_path = './models/anytext_v1.1.ckpt'  # if not None, load ckpt_path and continue training task, will not load "resume_path"
-resume_path = './models/anytext_sd15_scratch.ckpt'  # finetune from scratch
+batch_size = 2  # default 6
+grad_accum = 3  # enable perceptual loss may cost a lot of VRAM, you can set a smaller batch_size and make sure grad_accum * batch_size = 6
+ckpt_path = None  # if not None, load ckpt_path and continue training task, will not load "resume_path"
+resume_path = './models/anytext_v1.1.ckpt' # './models/anytext_sd15_scratch.ckpt'  # finetune from scratch
 model_config = './models_yaml/anytext_sd15.yaml'  # use anytext_sd15_perloss.yaml to enable perceptual loss
 logger_freq = 1000
 learning_rate = 2e-5  # default 2e-5
