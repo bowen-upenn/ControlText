@@ -75,10 +75,13 @@ def correct_curvature(curve_text_img, curved_line_img, image_size, p1, p2):
 # Recover from random perspective transformations
 def detect_gaussian_corners(image, num_lines=1, for_midline_endpoints=False, curr_path=None):
     # Step 1: Load image and convert to grayscale
-    gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    if image.shape[0] == 3:
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    if image.dtype != np.uint8:
+        image = cv2.convertScaleAbs(image)
 
     # Step 2: Apply GaussianBlur to smooth the image (optional, adjust parameters as needed)
-    blurred = cv2.GaussianBlur(gray_image, (9, 9), 0)
+    blurred = cv2.GaussianBlur(image, (9, 9), 0)
 
     # Step 3: Apply a threshold to isolate dots
     _, thresh = cv2.threshold(blurred, 50, 255, cv2.THRESH_BINARY)  # Adjust threshold value as necessary
@@ -170,6 +173,13 @@ def recover_texts(curved_text_img, pred_corners, pred_midline, pred_midline_endp
         corrected_midline = perform_perspective_transform(pred_midlines, image_size, source_corners, target_corners)
         corrected_midline_endpoints = perform_perspective_transform(pred_midline_endpoints, image_size, source_corners, target_corners)
 
+        # save the corrected image
+        print('begin saving images')
+        cv2.imwrite('corrected_image.jpg', corrected_image)
+        cv2.imwrite('corrected_midline.jpg', corrected_midline)
+        cv2.imwrite('corrected_midline_endpoints.jpg', corrected_midline_endpoints)
+        print('end saving images')
+
         # Recover from the curvatures
         endpoints = detect_gaussian_corners(corrected_midline_endpoints, num_lines=1, for_midline_endpoints=True)
         if endpoints is not None:
@@ -177,8 +187,10 @@ def recover_texts(curved_text_img, pred_corners, pred_midline, pred_midline_endp
             corrected_image = correct_curvature(corrected_image, corrected_midline, image_size, midline_start, midline_end)
             return corrected_image
         else:
+            print('end point is none')
             return None
     else:
+        print('corners is none')
         return None
 
 if __name__ == "__main__":

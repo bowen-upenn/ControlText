@@ -9,9 +9,15 @@ from torch.utils.data import Dataset, DataLoader
 from dataset_util import load, show_bbox_on_image
 import yaml
 import torch
+import argparse
+from torchvision import transforms
+import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 from synthetic_dataset.unet_models import ModifiedUNet
 from synthetic_dataset.restore_from_transformations import recover_texts
+from ccd.Dino.model.dino_vision import DINO_Finetune
+from Dino.utils.utils import Config
 
 
 phrase_list = [
@@ -60,28 +66,47 @@ def draw_glyph(font, text):
     return img
 
 
-def draw_glyph_font_aware(img, mask, unet_model_extract, unet_model_rectify):
+def draw_glyph_font_aware(img, mask, scene_text_segmentation_model, caption, transform): #unet_model_extract, unet_model_rectify
     if torch.distributed.is_initialized():
         current_rank = torch.distributed.get_rank()
     else:
         current_rank = 0  # Assuming it's the primary device or not using distributed training
+    print('current_rank image', current_rank)
 
     with torch.no_grad():
         # Extract texts from the background image
-        img_text_only = unet_model_extract(img.to(current_rank))
-        img_text_only = img_text_only[mask].cpu().numpy()   # only keep the text region corresponding to the largest polygon
+        cv2.imwrite('img_'+caption+'.jpg', img * 255)
+        img[~mask] = 0.0   # only keep the text region corresponding to the largest polygon
+        print('img before', img.shape, np.min(img), np.mean(img), np.max(img))
+        # img = transform(img)
+        # img = 0.5 * (torch.as_tensor(img).permute(2, 0, 1).unsqueeze(0) + 1.0)
+        img = torch.as_tensor(img).permute(2, 0, 1).unsqueeze(0)
+        print('img after', img.shape, torch.min(img), torch.mean(img), torch.max(img))
+        img_text_only = scene_text_segmentation_model(img.to(current_rank), text=None, return_loss=False)
+        cv2.imwrite('img_text_only_'+caption+'.jpg', img_text_only[0].numpy().transpose(1, 2, 0) * 255)
+        print('img_text_only', img_text_only.shape)
+        return img_text_only
 
-        # Recover the texts from perspective transformations and curvatures
-        predictions = unet_model_rectify(img_text_only.to(current_rank))
-        pred_corners = predictions[:, 0].cpu().numpy()
-        pred_midline = predictions[:, 1].cpu().numpy()
-        pred_midline_endpoints = predictions[:, 2].cpu().numpy()
-
-        recovered_texts = recover_texts(img_text_only, pred_corners, pred_midline, pred_midline_endpoints, image_size=(512, 512), text_size=(512*0.9, 80*0.9))
-        print('recovered_texts before', recovered_texts.shape)
-        recovered_texts = np.expand_dims(recovered_texts, axis=2).astype(np.float64)
-        print('recovered_texts after', recovered_texts.shape)
-        return recovered_texts
+        # # Recover the texts from perspective transformations and curvatures
+        # img_text_only = img_text_only.repeat(1, 3, 1, 1)
+        # print('img_text_only before', torch.min(img_text_only), torch.mean(img_text_only), torch.max(img_text_only))
+        # img_text_only = (img_text_only - torch.min(img_text_only)) / (torch.max(img_text_only) - torch.min(img_text_only))
+        # print('img_text_only after', torch.min(img_text_only), torch.mean(img_text_only), torch.max(img_text_only))
+        # predictions = unet_model_rectify(img_text_only)[0].numpy()
+        # img_text_only = img_text_only[0]
+        # pred_corners = predictions[0]
+        # pred_midline = predictions[1]
+        # pred_midline_endpoints = predictions[2]
+        # print('pred_corners', np.min(pred_corners), np.mean(pred_corners), np.max(pred_corners))
+        # cv2.imwrite('pred_corners_'+caption+'.jpg', pred_corners * 255)
+        # cv2.imwrite('pred_midline_'+caption+'.jpg', pred_midline * 255)
+        # cv2.imwrite('pred_midline_endpoints_'+caption+'.jpg', pred_midline_endpoints * 255)
+        #
+        # recovered_texts = recover_texts(img_text_only, pred_corners, pred_midline, pred_midline_endpoints, image_size=(512, 512), text_size=(512*0.9, 80*0.9))
+        # # print('recovered_texts before', recovered_texts.shape)
+        # recovered_texts = np.expand_dims(recovered_texts, axis=2).astype(np.float64)
+        # # print('recovered_texts after', recovered_texts.shape)
+        # return recovered_texts
 
 
 def draw_glyph2(font, text, polygon, vertAng=10, scale=1, width=512, height=512, add_space=True):
@@ -302,52 +327,132 @@ class T3DataSet(Dataset):
         if self.debug:
             self.tmp_items = [i for i in range(100)]
 
-        self.unet_model_extract, self.unet_model_rectify = self.setup_model_to_recover_condition_maps()
+        # self.unet_model_extract, self.unet_model_rectify = self.setup_model_to_recover_condition_maps()
+        self.scene_text_segmentation_model = self.setup_model_to_recover_condition_maps()
+        self.transform = transforms.Compose([transforms.ToTensor(),
+                                             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
 
     def setup_model_to_recover_condition_maps(self):
+        try:
+            # with open('./ccd/Dino/configs/CCD_vision_model_ARD.yaml', 'r') as file:
+            with open('./synthetic_dataset/unet_train_config.yaml', 'r') as file:
+                unet_args = yaml.safe_load(file)
+        except Exception as e:
+            print('Error reading the unet config file')
+
+        # def _parse_arguments(config):
+        #     parser = argparse.ArgumentParser()
+        #     parser.add_argument('-b', '--batch_size', type=int, default=None,
+        #                         help='batch size')
+        #     parser.add_argument('--run_only_test', action='store_true', default=None,
+        #                         help='flag to run only test and skip training')
+        #     parser.add_argument('--test_root', type=str, default=None,
+        #                         help='path to test datasets')
+        #     parser.add_argument('--checkpoint', type=str, default=None,
+        #                         help='path to model checkpoint')
+        #     parser.add_argument('--vision_checkpoint', type=str, default=None,
+        #                         help='path to vision model pretrained')
+        #     parser.add_argument('--debug', action='store_true', default=None,
+        #                         help='flag for running on debug without saving model checkpoints')
+        #     parser.add_argument('--model_eval', type=str, default=None,
+        #                         choices=['alignment', 'vision', 'language'],
+        #                         help='model decoder that outputs predictions')
+        #     parser.add_argument('--workdir', type=str, default=None,
+        #                         help='path to workdir folder')
+        #     parser.add_argument('--subworkdir', type=str, default=None,
+        #                         help='optional prefix to workdir path')
+        #     parser.add_argument('--epochs', type=int, default=None,
+        #                         help='number of training epochs')
+        #     parser.add_argument('--eval_iters', type=int, default=None,
+        #                         help='evaluate performance on validation set every this number iterations')
+        #     args = parser.parse_args()
+        #
+        #     if args.batch_size is not None:
+        #         config.dataset_train_batch_size = args.batch_size
+        #         config.dataset_valid_batch_size = args.batch_size
+        #         config.dataset_test_batch_size = args.batch_size
+        #     if args.run_only_test is not None:
+        #         config.global_phase = 'Test' if args.run_only_test else 'Train'
+        #     if args.test_root is not None:
+        #         config.dataset_test_roots = [args.test_root]
+        #     args_to_config_dict = {
+        #         'checkpoint': 'model_checkpoint',
+        #         'vision_checkpoint': 'model_vision_checkpoint',
+        #         'debug': 'global_debug',
+        #         'model_eval': 'model_eval',
+        #         'workdir': 'global_workdir',
+        #         'subworkdir': 'global_subworkdir',
+        #         'epochs': 'training_epochs',
+        #         'eval_iters': 'training_eval_iters',
+        #     }
+        #     for args_attr, config_attr in args_to_config_dict.items():
+        #         if getattr(args, args_attr) is not None:
+        #             setattr(config, config_attr, getattr(args, args_attr))
+        #
+        #     return config
+
+        def _remove_module_prefix(state_dict):
+            # if the unet is trained using DDP, the model is saved with "module." prefix
+            new_state_dict = {}
+            for key, value in state_dict.items():
+                if key.startswith("module."):
+                    new_key = key[7:]  # Remove the "module." prefix
+                else:
+                    new_key = key
+                new_state_dict[new_key] = value
+            return new_state_dict
+
+        #     config = Config('./ccd/Dino/configs/CCD_pretrain_ViT_Base.yaml')
+        #     config.global_phase = 'Test'
+        #     config = _parse_arguments(config)
+        #
+        #     if torch.distributed.is_initialized():
+        #         current_rank = torch.distributed.get_rank()
+        #     else:
+        #         current_rank = 0  # Assuming it's the primary device or not using distributed training
+        #     print('current_rank model', current_rank)
+        #     model = DINO_Finetune(config).to(current_rank)
+        #
+        #     pretrained_state_dict = torch.load('./ccd/Dino/saved_models/Base_ARD_checkpoint.pth')
+        #     pretrained_state_dict['net'] = _remove_module_prefix(pretrained_state_dict['net'])
+        #     model.load_state_dict(pretrained_state_dict['net'])
+        #     model.eval()
+        #
+        # return model
+
+        def _load_unet_model(unet_args, current_rank, step):
+            # Build the UNet model
+            unet_model = torch.hub.load('mateuszbuda/brain-segmentation-pytorch', 'unet',
+                                        in_channels=3, out_channels=unet_args['model']['out_channels'], init_features=32, pretrained=False)
+            base_model_final_channels = unet_args['model']['out_channels']
+            unet_model = ModifiedUNet(unet_model, base_model_final_channels=base_model_final_channels, step=step, deformable=False)
+            # unet_model = unet_model.to(current_rank)
+            unet_model.eval()
+
+            # map_location = {'cuda:%d' % current_rank: 'cuda:%d' % 0}
+            checkpoint = torch.load('synthetic_dataset/' + unet_args['training']['checkpoint_path'] + '/unet_model_' + step + '_' +
+                                     str(unet_args['training']['ckpt_epoch_'+step]) + '.pth')#, map_location=map_location)
+            checkpoint = _remove_module_prefix(checkpoint)
+            unet_model.load_state_dict(checkpoint)
+            print('Loaded checkpoint from %s. Step %s' % (unet_args['training']['checkpoint_path'], step))
+            return unet_model
+
+        try:
+            with open('synthetic_dataset/unet_train_config.yaml', 'r') as file:
+                unet_args = yaml.safe_load(file)
+        except Exception as e:
+            print('Error reading the unet config file')
+
         with torch.no_grad():
-            def _remove_module_prefix(state_dict):
-                # if the unet is trained using DDP, the model is saved with "module." prefix
-                new_state_dict = {}
-                for key, value in state_dict.items():
-                    if key.startswith("module."):
-                        new_key = key[7:]  # Remove the "module." prefix
-                    else:
-                        new_key = key
-                    new_state_dict[new_key] = value
-                return new_state_dict
-
-            def _load_unet_model(unet_args, current_rank, step):
-                # Build the UNet model
-                unet_model = torch.hub.load('mateuszbuda/brain-segmentation-pytorch', 'unet',
-                                            in_channels=3, out_channels=unet_args['model']['out_channels'], init_features=32, pretrained=False)
-                base_model_final_channels = unet_args['model']['out_channels']
-                unet_model = ModifiedUNet(unet_model, base_model_final_channels=base_model_final_channels, step=step, deformable=False)
-                unet_model = unet_model.to(current_rank)
-                unet_model.eval()
-
-                map_location = {'cuda:%d' % current_rank: 'cuda:%d' % 0}
-                checkpoint = torch.load('synthetic_dataset/' + unet_args['training']['checkpoint_path'] + '/unet_model_' + step + '_' +
-                                         str(unet_args['training']['ckpt_epoch_'+step]) + '.pth', map_location=map_location)
-                checkpoint = _remove_module_prefix(checkpoint)
-                unet_model.load_state_dict(checkpoint)
-                print('Loaded checkpoint from %s. Step %s' % (unet_args['training']['checkpoint_path'], step))
-                return unet_model
-
-            try:
-                with open('synthetic_dataset/unet_train_config.yaml', 'r') as file:
-                    unet_args = yaml.safe_load(file)
-            except Exception as e:
-                print('Error reading the unet config file')
-
             if torch.distributed.is_initialized():
                 current_rank = torch.distributed.get_rank()
             else:
                 current_rank = 0  # Assuming it's the primary device or not using distributed training
 
             unet_model_extract = _load_unet_model(unet_args, current_rank, step='extract')
-            unet_model_rectify = _load_unet_model(unet_args, current_rank, step='rectify')
-            return unet_model_extract, unet_model_rectify
+            # unet_model_rectify = _load_unet_model(unet_args, current_rank, step='rectify')
+
+        return unet_model_extract
 
     def load_data(self, json_path, percent):
         tic = time.time()
@@ -447,8 +552,9 @@ class T3DataSet(Dataset):
             #     item_dict['positions'] += [self.draw_pos(polygon, self.mask_pos_prob)]
 
             # glyphs, only draw the glyphs in the largest polygon
-            largest_polygon_mask = self.draw_inv_mask([largest_polygon])
-            gly_line = draw_glyph_font_aware(target, largest_polygon_mask, self.unet_model_extract, self.unet_model_rectify)
+            largest_polygon_mask = self.draw_inv_mask([largest_polygon])[:, :, 0].astype(bool)
+            gly_line = draw_glyph_font_aware(target, largest_polygon_mask, self.scene_text_segmentation_model, cur_item['caption'], self.transform)
+            # gly_line = draw_glyph_font_aware(target, largest_polygon_mask, self.unet_model_extract, self.unet_model_rectify, cur_item['caption'], self.transform)
             glyphs = draw_glyph2_font_aware(target, largest_polygon_mask, largest_polygon, self.unet_model_extract, self.unet_model_rectify)
 
             # text_in_largest_polygon = item_dict['texts'][largest_area_idx]

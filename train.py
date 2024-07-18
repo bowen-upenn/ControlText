@@ -7,11 +7,12 @@ from cldm.logger import ImageLogger
 from cldm.model import create_model, load_state_dict
 from pytorch_lightning.callbacks import ModelCheckpoint
 import shutil
+import torch.multiprocessing as mp
 
 NUM_NODES = 1
 # Configs
-batch_size = 2  # default 6
-grad_accum = 3  # enable perceptual loss may cost a lot of VRAM, you can set a smaller batch_size and make sure grad_accum * batch_size = 6
+batch_size = 1  # default 6
+grad_accum = 1  # enable perceptual loss may cost a lot of VRAM, you can set a smaller batch_size and make sure grad_accum * batch_size = 6
 ckpt_path = None  # if not None, load ckpt_path and continue training task, will not load "resume_path"
 resume_path = './models/anytext_v1.1.ckpt' # './models/anytext_sd15_scratch.ckpt'  # finetune from scratch
 model_config = './models_yaml/anytext_sd15.yaml'  # use anytext_sd15_perloss.yaml to enable perceptual loss
@@ -28,6 +29,8 @@ assert (save_steps is None) != (save_epochs is None)
 
 
 if __name__ == '__main__':
+    # mp.set_start_method('spawn', force=True)
+
     log_img = os.path.join(root_dir, 'image_log/train')
     if os.path.exists(log_img):
         try:
@@ -51,18 +54,18 @@ if __name__ == '__main__':
     )
     json_paths = [
         r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/Art/data.json',
-        r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/COCO_Text/data.json',
-        r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/icdar2017rctw/data.json',
-        r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/LSVT/data.json',
-        r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/mlt2019/data.json',
-        r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/MTWI2018/data.json',
-        r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/ReCTS/data.json',
-        '/tmp/datasets/AnyWord-3M/link_download/laion/data_v1.1.json',
+        # r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/COCO_Text/data.json',
+        # r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/icdar2017rctw/data.json',
+        # r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/LSVT/data.json',
+        # r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/mlt2019/data.json',
+        # r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/MTWI2018/data.json',
+        # r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/ReCTS/data.json',
+        # '/tmp/datasets/AnyWord-3M/link_download/laion/data_v1.1.json',
         '/tmp/datasets/AnyWord-3M/link_download/wukong_1of5/data_v1.1.json',
-        '/tmp/datasets/AnyWord-3M/link_download/wukong_2of5/data_v1.1.json',
-        '/tmp/datasets/AnyWord-3M/link_download/wukong_3of5/data_v1.1.json',
-        '/tmp/datasets/AnyWord-3M/link_download/wukong_4of5/data_v1.1.json',
-        '/tmp/datasets/AnyWord-3M/link_download/wukong_5of5/data_v1.1.json',
+        # '/tmp/datasets/AnyWord-3M/link_download/wukong_2of5/data_v1.1.json',
+        # '/tmp/datasets/AnyWord-3M/link_download/wukong_3of5/data_v1.1.json',
+        # '/tmp/datasets/AnyWord-3M/link_download/wukong_4of5/data_v1.1.json',
+        # '/tmp/datasets/AnyWord-3M/link_download/wukong_5of5/data_v1.1.json',
         ]
     dataset = T3DataSet(json_paths, max_lines=5, max_chars=20, caption_pos_prob=0.0, mask_pos_prob=1.0, mask_img_prob=mask_ratio, glyph_scale=2, percent=dataset_percent, debug=False, using_dlc=False, wm_thresh=wm_thresh)
     dataloader = DataLoader(dataset, num_workers=4, persistent_workers=True, batch_size=batch_size, shuffle=True)

@@ -21,9 +21,9 @@ training:
   patience: 10
   start_epoch: 0
   test_epoch: 10
-  ckpt_epoch_extract: 7
+  ckpt_epoch_extract: 19
   ckpt_epoch_rectify: 29
-  num_epochs: 10
+  num_epochs: 20
   print_every: 100
   val_every: 500
   lambda_loss_color_map: 1

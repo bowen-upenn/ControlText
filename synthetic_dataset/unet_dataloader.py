@@ -27,6 +27,9 @@ class SyntheticDataset(Dataset):
         self.images = os.listdir(images_dir)
         self.step = step
         self.transform = transforms.Compose([transforms.ToTensor(),
+                                             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+                                             transforms.Resize((image_size, image_size), antialias=True)])
+        self.transform_grayscale = transforms.Compose([transforms.ToTensor(),
                                              transforms.Resize((image_size, image_size), antialias=True)])
 
     def __len__(self):
@@ -44,7 +47,7 @@ class SyntheticDataset(Dataset):
 
             if self.transform is not None:
                 source = self.transform(source)
-                target = self.transform(target)
+                target = self.transform_grayscale(target)
 
             # Process the target image to extract the binary mask of the texts
             target = (target != 0).squeeze(0).float()
@@ -63,9 +66,9 @@ class SyntheticDataset(Dataset):
 
             if self.transform is not None:
                 source = self.transform(source)
-                target_corners = self.transform(target_corners)
-                target_midlines = self.transform(target_midlines)
-                target_midline_endpoints = self.transform(target_midline_endpoints)
+                target_corners = self.transform_grayscale(target_corners)
+                target_midlines = self.transform_grayscale(target_midlines)
+                target_midline_endpoints = self.transform_grayscale(target_midline_endpoints)
 
             # Process the target image to extract the binary mask of the texts
             source = (source != 0).any(axis=0).float().unsqueeze(0).repeat(3, 1, 1)
