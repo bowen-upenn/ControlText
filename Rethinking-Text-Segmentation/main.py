@@ -18,7 +18,24 @@ from lib.cfg_helper import cfg_unique_holder as cfguh, \
     experiment_folder, \
     common_initiates
 
-from configs.cfg_dataset import cfg_textseg, cfg_cocots, cfg_mlt, cfg_icdar13, cfg_totaltext, cfg_controltext
+from configs.cfg_dataset import (
+    cfg_textseg,
+    cfg_cocots,
+    cfg_mlt,
+    cfg_icdar13,
+    cfg_totaltext,
+    cfg_controltext,
+    cfg_laion_p1,
+    cfg_laion_p2,
+    cfg_laion_p3,
+    cfg_laion_p4,
+    cfg_laion_p5,
+    cfg_wukong_1of5,
+    cfg_wukong_2of5,
+    cfg_wukong_3of5,
+    cfg_wukong_4of5,
+    cfg_wukong_5of5
+)
 from configs.cfg_model import cfg_texrnet as cfg_mdel
 from configs.cfg_base import cfg_train, cfg_test
 
@@ -80,6 +97,27 @@ if __name__ == '__main__':
         cfg_data = cfg_totaltext
     elif args.dsname == "controltext":
         cfg_data = cfg_controltext
+    elif args.dsname == "laion_p1":
+        cfg_data = cfg_laion_p1
+    elif args.dsname == "laion_p2":
+        cfg_data = cfg_laion_p2
+    elif args.dsname == "laion_p3":
+        cfg_data = cfg_laion_p3
+    elif args.dsname == "laion_p4":
+        cfg_data = cfg_laion_p4
+    elif args.dsname == "laion_p5":
+        cfg_data = cfg_laion_p5
+    elif args.dsname == 'wukong_1of5':
+        cfg_data = cfg_wukong_1of5
+    elif args.dsname == 'wukong_2of5':
+        cfg_data = cfg_wukong_2of5
+    elif args.dsname == 'wukong_3of5':
+        cfg_data = cfg_wukong_3of5
+    elif args.dsname == 'wukong_4of5':
+        cfg_data = cfg_wukong_4of5
+    elif args.dsname == 'wukong_5of5':
+        cfg_data = cfg_wukong_5of5
+
     else:
         raise ValueError
 
@@ -129,6 +167,27 @@ if __name__ == '__main__':
             cfg.DATA.DATASET_MODE = 'test'
         elif args.dsname == "controltext":
             cfg.DATA.DATASET_MODE = 'test'
+        elif args.dsname == 'laion_p1':
+            cfg.DATA.DATASET_MODE = 'test'
+        elif args.dsname == 'laion_p2':
+            cfg.DATA.DATASET_MODE = 'test'
+        elif args.dsname == 'laion_p3':
+            cfg.DATA.DATASET_MODE = 'test'
+        elif args.dsname == 'laion_p4':
+            cfg.DATA.DATASET_MODE = 'test'
+        elif args.dsname == 'laion_p5':
+            cfg.DATA.DATASET_MODE = 'test'
+        elif args.dsname == 'wukong_1of5':
+            cfg.DATA.DATASET_MODE = 'test'
+        elif args.dsname == 'wukong_2of5':
+            cfg.DATA.DATASET_MODE = 'test'
+        elif args.dsname == 'wukong_3of5':
+            cfg.DATA.DATASET_MODE = 'test'
+        elif args.dsname == 'wukong_4of5':
+            cfg.DATA.DATASET_MODE = 'test'
+        elif args.dsname == 'wukong_5of5':
+            cfg.DATA.DATASET_MODE = 'test'
+
         else:
             raise ValueError
 
@@ -198,7 +257,7 @@ if __name__ == '__main__':
     if cfg.DEBUG:
         cfg.EXPERIMENT_ID = 999999999999
         cfg.DATA.NUM_WORKERS_PER_GPU = 0
-        cfg.TRAIN.BATCH_SIZE_PER_GPU = 2
+        cfg.TRAIN.BATCH_SIZE_PER_GPU = 4
 
     cfg = common_initiates(cfg)
 

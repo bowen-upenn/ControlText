@@ -19,6 +19,11 @@ from PIL import Image
 import copy
 from easydict import EasyDict as edict
 
+# for timing the inference
+from torch.cuda import Event
+import time
+import torch
+
 # from lib import utils
 from lib import nputils
 from lib import torchutils
@@ -112,6 +117,46 @@ def set_cfg(cfg, dsname):
         cfg.DATA.LOADER_PIPELINE = [
             'NumpyImageLoader']
         # cfg.DATA.FORMATTER = 'NoneSemanticFormatter'
+    elif dsname == 'laion_p1':
+        cfg.DATA.LOADER_PIPELINE = [
+            'NumpyImageLoader'
+        ]
+    elif dsname == 'laion_p2':
+        cfg.DATA.LOADER_PIPELINE = [
+            'NumpyImageLoader'
+        ]
+    elif dsname == 'laion_p3':
+        cfg.DATA.LOADER_PIPELINE = [
+            'NumpyImageLoader'
+        ]
+    elif dsname == 'laion_p4':
+        cfg.DATA.LOADER_PIPELINE = [
+            'NumpyImageLoader'
+        ]
+    elif dsname == 'laion_p5':
+        cfg.DATA.LOADER_PIPELINE = [
+            'NumpyImageLoader'
+        ]
+    elif dsname == 'wukong_1of5':
+        cfg.DATA.LOADER_PIPELINE = [
+            'NumpyImageLoader'
+        ]
+    elif dsname == 'wukong_2of5':
+        cfg.DATA.LOADER_PIPELINE = [
+            'NumpyImageLoader'
+        ]
+    elif dsname == 'wukong_3of5':
+        cfg.DATA.LOADER_PIPELINE = [
+            'NumpyImageLoader'
+        ]
+    elif dsname == 'wukong_4of5':
+        cfg.DATA.LOADER_PIPELINE = [
+            'NumpyImageLoader'
+        ]
+    elif dsname == 'wukong_5of5':
+        cfg.DATA.LOADER_PIPELINE = [
+            'NumpyImageLoader'
+        ]
     else:
         raise ValueError
 
@@ -264,6 +309,8 @@ def set_cfg_hrnetw48(cfg):
 class es(object):
     def __init__(self):
         super().__init__()
+        self.inference_count = 0
+        self.total_inference_time = 0
 
     def output_f(self, item):
         outdir = osp.join(
@@ -295,6 +342,13 @@ class es(object):
         # ms-flip inference
         psemc_ms, prfnc_ms, pcount_ms = {}, {}, {}
         pattkey, patt = {}, {}
+
+        # start timing
+        start_event = Event(enable_timing=True)
+        end_event = Event(enable_timing=True)
+
+        start_event.record()
+
         for mstag, mssize in cfg.TEST.INFERENCE_MS:
             # by area
             ratio = np.sqrt(mssize ** 2 / (oh * ow))
@@ -362,6 +416,14 @@ class es(object):
                 im, gtsem, psemc, psemc_ms, psem, prfnc, prfnc_ms, prfn)
         pattkey, patt = torch_to_numpy(pattkey, patt)
 
+        # end timing
+        end_event.record()
+        torch.cuda.synchronize()
+        inference_time = start_event.elapsed_time(end_event) / 1000  # Convert to seconds
+
+        self.total_inference_time += inference_time
+        self.inference_count += 1
+
         return {
             'im': im,
             'gtsem': gtsem,
@@ -373,7 +435,9 @@ class es(object):
             'prfnc_ms': prfnc_ms,
             'pattkey': pattkey,
             'patt': patt,
-            'fn': fn, }
+            'fn': fn,
+            'inference_time': inference_time
+        }
 
     def __call__(self,
                  RANK,
@@ -389,6 +453,20 @@ class es(object):
 
         gtsem = None
         for idx, batch in enumerate(dataloader):
+            # added by Yuan to skil generated images
+            im, gtsem, fn = batch
+            filename_before_generate = fn[0] + '.jpg'
+
+            # Check if the image already exists in the directory
+            file_path = os.path.join(
+                '/pool/bwjiang/controltext/Rethinking-Text-Segmentation/log/images/output/',
+                cfg.DATA.DATASET_NAME,
+                filename_before_generate)
+            if os.path.exists(file_path):
+                print(f"Skipping {filename_before_generate} as it already exists.")
+                continue  # Skip this batch and move to the next
+            # Codes added by Yuan end here
+
             item = self.main(
                 RANK=RANK,
                 batch=batch,
@@ -397,10 +475,19 @@ class es(object):
             gtsem, prfn = [item[i] for i in [
                 'gtsem', 'prfn']]
 
+            # print the time it takes for this inference
+            print(f"Batch {idx} inference time: {item['inference_time']:.4f} seconds")
+
             # save the predicted image
             prfn = (prfn[0] * 255).astype(np.uint8)
             predicted_image = Image.fromarray(prfn, 'L')
-            predicted_image.save('log/images/output_' + str(idx) + '.jpg')
+            # predicted_image.save('log/images/output_' + str(idx) + '.jpg')
+            output_dir = osp.join('log/images/output/', cfg.DATA.DATASET_NAME)
+            filename = item['fn'][0] + '.jpg'
+            predicted_image_path = osp.join(output_dir, filename)
+            print(predicted_image_path)
+            os.makedirs(output_dir, exist_ok=True)  # Ensure the directory exists
+            predicted_image.save(predicted_image_path)
 
             if gtsem is not None:
                 evaluator['rfn'].bw_iandu(
@@ -434,4 +521,8 @@ class es(object):
             resultf = osp.join(
                 cfg.LOG_DIR, 'result.json')
             evaluator.save(resultf, cfg)
+            # Print average inference time
+            avg_inference_time = self.total_inference_time / self.inference_count
+            print(f"Average inference time: {avg_inference_time:.4f} seconds")
+
         return eval_result

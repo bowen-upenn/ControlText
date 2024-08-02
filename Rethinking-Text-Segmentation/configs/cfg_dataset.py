@@ -16,6 +16,69 @@ cfg.NUM_WORKERS = None
 cfg.TRY_SAMPLE = None
 
 
+#################################
+#####      wukong_1of5      #####
+#################################
+
+cfg_wukong_1of5 = copy.deepcopy(cfg)
+cfg_wukong_1of5.DATASET_NAME = 'wukong_1of5'
+cfg_wukong_1of5.ROOT_DIR = '/pool/bwjiang/datasets/AnyWord-3M/link_download/wukong_1of5/imgs'
+cfg_wukong_1of5.IM_MEAN = [0.485, 0.456, 0.406]
+cfg_wukong_1of5.IM_STD = [0.229, 0.224, 0.225]
+cfg_wukong_1of5.SEGLABEL_IGNORE_LABEL = 999
+cfg_wukong_1of5.CLASS_NUM = 2
+
+
+#################################
+#####      wukong_2of5      #####
+#################################
+
+cfg_wukong_2of5 = copy.deepcopy(cfg)
+cfg_wukong_2of5.DATASET_NAME = 'wukong_2of5'
+cfg_wukong_2of5.ROOT_DIR = '/pool/bwjiang/datasets/AnyWord-3M/link_download/wukong_2of5/imgs'
+cfg_wukong_2of5.IM_MEAN = [0.485, 0.456, 0.406]
+cfg_wukong_2of5.IM_STD = [0.229, 0.224, 0.225]
+cfg_wukong_2of5.SEGLABEL_IGNORE_LABEL = 999
+cfg_wukong_2of5.CLASS_NUM = 2
+
+#################################
+#####      wukong_3of5      #####
+#################################
+
+cfg_wukong_3of5 = copy.deepcopy(cfg)
+cfg_wukong_3of5.DATASET_NAME = 'wukong_3of5'
+cfg_wukong_3of5.ROOT_DIR = '/pool/bwjiang/datasets/AnyWord-3M/link_download/wukong_3of5/imgs'
+cfg_wukong_3of5.IM_MEAN = [0.485, 0.456, 0.406]
+cfg_wukong_3of5.IM_STD = [0.229, 0.224, 0.225]
+cfg_wukong_3of5.SEGLABEL_IGNORE_LABEL = 999
+cfg_wukong_3of5.CLASS_NUM = 2
+
+
+#################################
+#####      wukong_4of5      #####
+#################################
+
+cfg_wukong_4of5 = copy.deepcopy(cfg)
+cfg_wukong_4of5.DATASET_NAME = 'wukong_4of5'
+cfg_wukong_4of5.ROOT_DIR = '/pool/bwjiang/datasets/AnyWord-3M/link_download/wukong_4of5/imgs'
+cfg_wukong_4of5.IM_MEAN = [0.485, 0.456, 0.406]
+cfg_wukong_4of5.IM_STD = [0.229, 0.224, 0.225]
+cfg_wukong_4of5.SEGLABEL_IGNORE_LABEL = 999
+cfg_wukong_4of5.CLASS_NUM = 2
+
+
+#################################
+#####      wukong_5of5      #####
+#################################
+
+cfg_wukong_5of5 = copy.deepcopy(cfg)
+cfg_wukong_5of5.DATASET_NAME = 'wukong_5of5'
+cfg_wukong_5of5.ROOT_DIR = '/pool/bwjiang/datasets/AnyWord-3M/link_download/wukong_5of5/imgs'
+cfg_wukong_5of5.IM_MEAN = [0.485, 0.456, 0.406]
+cfg_wukong_5of5.IM_STD = [0.229, 0.224, 0.225]
+cfg_wukong_5of5.SEGLABEL_IGNORE_LABEL = 999
+cfg_wukong_5of5.CLASS_NUM = 2
+
 
 #################################
 #####      controltext      #####
@@ -31,6 +94,69 @@ cfg_controltext.IM_STD = [0.229, 0.224, 0.225]
 cfg_controltext.SEGLABEL_IGNORE_LABEL = 999
 cfg_controltext.CLASS_NUM = 2
 
+
+##############################
+#####      Laion_p1      #####
+##############################
+
+cfg_laion_p1 = copy.deepcopy(cfg)
+cfg_laion_p1.DATASET_NAME = 'laion_p1'
+cfg_laion_p1.ROOT_DIR = '/pool/bwjiang/datasets/AnyWord-3M/link_download/laion/laion_p1/imgs'
+cfg_laion_p1.IM_MEAN = [0.485, 0.456, 0.406]
+cfg_laion_p1.IM_STD = [0.229, 0.224, 0.225]
+cfg_laion_p1.SEGLABEL_IGNORE_LABEL = 999
+cfg_laion_p1.CLASS_NUM = 2
+
+##############################
+#####      Laion_p2      #####
+##############################
+
+cfg_laion_p2 = copy.deepcopy(cfg)
+cfg_laion_p2.DATASET_NAME = 'laion_p2'
+cfg_laion_p2.ROOT_DIR = '/pool/bwjiang/datasets/AnyWord-3M/link_download/laion/laion_p2/imgs'
+cfg_laion_p2.IM_MEAN = [0.485, 0.456, 0.406]
+cfg_laion_p2.IM_STD = [0.229, 0.224, 0.225]
+cfg_laion_p2.SEGLABEL_IGNORE_LABEL = 999
+cfg_laion_p2.CLASS_NUM = 2
+
+
+##############################
+#####      Laion_p3      #####
+##############################
+
+cfg_laion_p3 = copy.deepcopy(cfg)
+cfg_laion_p3.DATASET_NAME = 'laion_p3'
+cfg_laion_p3.ROOT_DIR = '/pool/bwjiang/datasets/AnyWord-3M/link_download/laion/laion_p3/imgs'
+cfg_laion_p3.IM_MEAN = [0.485, 0.456, 0.406]
+cfg_laion_p3.IM_STD = [0.229, 0.224, 0.225]
+cfg_laion_p3.SEGLABEL_IGNORE_LABEL = 999
+cfg_laion_p3.CLASS_NUM = 2
+
+
+##############################
+#####      Laion_p4      #####
+##############################
+
+cfg_laion_p4 = copy.deepcopy(cfg)
+cfg_laion_p4.DATASET_NAME = 'laion_p4'
+cfg_laion_p4.ROOT_DIR = '/pool/bwjiang/datasets/AnyWord-3M/link_download/laion/laion_p4/imgs'
+cfg_laion_p4.IM_MEAN = [0.485, 0.456, 0.406]
+cfg_laion_p4.IM_STD = [0.229, 0.224, 0.225]
+cfg_laion_p4.SEGLABEL_IGNORE_LABEL = 999
+cfg_laion_p4.CLASS_NUM = 2
+
+
+##############################
+#####      Laion_p5      #####
+##############################
+
+cfg_laion_p5 = copy.deepcopy(cfg)
+cfg_laion_p5.DATASET_NAME = 'laion_p5'
+cfg_laion_p5.ROOT_DIR = '/pool/bwjiang/datasets/AnyWord-3M/link_download/laion/laion_p5/imgs'
+cfg_laion_p5.IM_MEAN = [0.485, 0.456, 0.406]
+cfg_laion_p5.IM_STD = [0.229, 0.224, 0.225]
+cfg_laion_p5.SEGLABEL_IGNORE_LABEL = 999
+cfg_laion_p5.CLASS_NUM = 2
 
 ##############################
 #####      imagenet      #####
