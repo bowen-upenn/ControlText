@@ -14,11 +14,6 @@ from torchvision import transforms
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 
-from synthetic_dataset.unet_models import ModifiedUNet
-from synthetic_dataset.restore_from_transformations import recover_texts
-from ccd.Dino.model.dino_vision import DINO_Finetune
-from Dino.utils.utils import Config
-
 
 phrase_list = [
     ', content and position of the texts are ',
@@ -98,6 +93,20 @@ def rotate_point(point, center, angle):
     x1 += center[0]
     y1 += center[1]
     return int(x1), int(y1)
+
+
+def order_points(pts):
+    rect = np.zeros((4, 2), dtype="float32")
+
+    s = pts.sum(axis=1)
+    rect[0] = pts[np.argmin(s)]
+    rect[2] = pts[np.argmax(s)]
+
+    diff = np.diff(pts, axis=1)
+    rect[1] = pts[np.argmin(diff)]
+    rect[3] = pts[np.argmax(diff)]
+
+    return rect
 
 
 class T3DataSet(Dataset):
@@ -229,6 +238,7 @@ class T3DataSet(Dataset):
 
             item_dict['caption'] = get_caption_pos(item_dict['caption'], pos_idxs, self.caption_pos_porb, self.place_holder)
             item_dict['polygons'] = [cur_item['polygons'][i] for i in sel_idxs]
+            # print('polygons', [len(polygon) for polygon in item_dict['polygons']])
             item_dict['areas'] = [cv2.contourArea(cur_item['polygons'][i]) for i in sel_idxs]
 
             # mask_pos, only draw the largest polygon
@@ -236,6 +246,8 @@ class T3DataSet(Dataset):
             largest_area_idx = item_dict['areas'].index(max(item_dict['areas']))   # the index in sel_idxs
             largest_polygon = item_dict['polygons'][largest_area_idx]
             item_dict['positions'] += [self.draw_pos(largest_polygon, self.mask_pos_prob)]
+            # for polygon in item_dict['polygons']:
+            #     item_dict['positions'] += [self.draw_pos(polygon, self.mask_pos_prob)]
 
             # glyphs, only draw the glyphs in the largest polygon
             largest_polygon_mask = self.draw_inv_mask([largest_polygon])[:, :, 0].astype(bool)
@@ -369,9 +381,81 @@ if __name__ == '__main__':
     transform = None
 
     for i, data in tqdm(enumerate(train_loader)):
+        # if data['img_name'][0][:-4] not in ['000149739']:
+        #     continue
+        # print("img_name:", data['img_name'][0])
+
         img = ((data['img'][0].numpy() + 1.0) / 2.0 * 255).astype(np.uint8)
         mask = data['largest_polygon_mask']
+        largest_polygon = data['largest_polygon'][0].numpy()
 
         # Extract texts from the background image
         img[~mask[0], :] = 0.0
-        cv2.imwrite(os.path.join('condition_images', data['img_name'][0]), img)
+        # cv2.imwrite(f"test_imgs/{data['img_name'][0][:-4]}_img.jpg", img)
+
+        rect = cv2.minAreaRect(largest_polygon)  # a bounding rectangle that also considers the rotation
+        box = cv2.boxPoints(rect)
+        box = np.int32(box)
+        # w, h = rect[1]
+        # angle = rect[2]
+        # print(f'angle={angle}, w={w}, h={h}, box={box}')
+
+        # Draw and save the bounding box image
+        img_with_box = img.copy()
+        img_with_box = cv2.drawContours(img_with_box, [box], 0, (255, 0, 0), 2)
+        cv2.imwrite(f"test_imgs/{data['img_name'][0][:-4]}_box.jpg", img_with_box)
+
+        # # Draw and save the polygon image
+        # img_with_polygon = img.copy()
+        # img_with_polygon = cv2.polylines(img_with_polygon, [largest_polygon.astype(np.int32)], isClosed=True, color=(0, 255, 0), thickness=2)
+        # cv2.imwrite(f"test_imgs/{data['img_name'][0][:-4]}_poly.jpg", img_with_polygon)
+
+        # Draw and save the position image
+        positions = data['positions'][0].numpy()[0, :, :, 0]
+        # print(positions.shape, positions.max(), positions.min(), f"test_imgs/{data['img_name'][0][:-4]}_pos.jpg")
+        img_with_pos = (positions * 255).astype(np.uint8)
+        cv2.imwrite(f"test_imgs/{data['img_name'][0][:-4]}_pos.jpg", img_with_pos)
+
+        # Calculate the width and height of the box
+        box = order_points(box.astype(np.float32))
+        w = np.linalg.norm(box[0] - box[1])
+        h = np.linalg.norm(box[1] - box[2])
+
+        # Calculate the new rectangle dimensions
+        aspect_ratio = w / h
+        max_side_length = int(0.8 * 512)
+        if w > h:
+            new_width = max_side_length
+            new_height = int(max_side_length / aspect_ratio)
+        else:
+            new_height = max_side_length
+            new_width = int(max_side_length / aspect_ratio)
+        # print('w', w, 'h', h, 'box', box, 'new_width:', new_width, 'new_height:', new_height, 'aspect_ratio', aspect_ratio, 'name', data['img_name'][0])
+
+        # Center the new rectangle
+        center_x, center_y = 256, 256  # Image center for 512x512 image
+        new_rect = np.array([
+            [center_x - new_width // 2, center_y - new_height // 2],
+            [center_x + new_width // 2, center_y - new_height // 2],
+            [center_x + new_width // 2, center_y + new_height // 2],
+            [center_x - new_width // 2, center_y + new_height // 2]
+        ], dtype=np.float32)
+
+        # Calculate the perspective transform matrix
+        old_rect_ordered = box
+        new_rect_ordered = new_rect.astype(np.float32)
+        M = cv2.getPerspectiveTransform(old_rect_ordered, new_rect_ordered)
+
+        # Apply the perspective transformation
+        transformed_img = cv2.warpPerspective(img, M, (512, 512))
+
+        # Draw the new rect on the transformed image
+        img_with_new_rect = transformed_img.copy()
+        img_with_new_rect = cv2.drawContours(img_with_new_rect, [new_rect.astype(np.int32)], 0, (0, 255, 0), 2)
+
+        # Save the projected image with the new rect
+        cv2.imwrite(f"test_imgs/{data['img_name'][0][:-4]}_projected.jpg", img_with_new_rect)
+
+    # if i > 10:
+        #     break
+
