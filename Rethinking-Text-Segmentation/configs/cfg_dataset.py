@@ -197,11 +197,88 @@ cfg_textseg.LOAD_IS_MC_SEGLABEL = True
 ##########################
 
 cfg_cocotext = copy.deepcopy(cfg)
-cfg_cocotext.DATASET_NAME = 'cocotext'
-cfg_cocotext.ROOT_DIR = osp.abspath(osp.join(
-    osp.dirname(__file__), '..', 'data', 'COCO'))
+cfg_cocotext.DATASET_NAME = 'coco_text'
+cfg_cocotext.ROOT_DIR = '/pool/bwjiang/controltext/Rethinking-Text-Segmentation/other_anytext_data/COCO_Text/images'
 cfg_cocotext.IM_MEAN = [0.485, 0.456, 0.406]
 cfg_cocotext.IM_STD = [0.229, 0.224, 0.225]
+cfg_cocotext.SEGLABEL_IGNORE_LABEL = 999
+cfg_cocotext.CLASS_NUM = 2
+
+
+##########################
+#####    MTWI2018    #####
+##########################
+
+cfg_MTWI2018 = copy.deepcopy(cfg)
+cfg_MTWI2018.DATASET_NAME = 'MTWI2018'
+cfg_MTWI2018.ROOT_DIR = '/pool/bwjiang/controltext/Rethinking-Text-Segmentation/other_anytext_data/MTWI2018/images'
+cfg_MTWI2018.IM_MEAN = [0.485, 0.456, 0.406]
+cfg_MTWI2018.IM_STD = [0.229, 0.224, 0.225]
+cfg_MTWI2018.SEGLABEL_IGNORE_LABEL = 999
+cfg_MTWI2018.CLASS_NUM = 2
+
+
+##########################
+#####     ReCTS      #####
+##########################
+
+cfg_ReCTS = copy.deepcopy(cfg)
+cfg_ReCTS.DATASET_NAME = 'ReCTS'
+cfg_ReCTS.ROOT_DIR = '/pool/bwjiang/controltext/Rethinking-Text-Segmentation/other_anytext_data/ReCTS/images'
+cfg_ReCTS.IM_MEAN = [0.485, 0.456, 0.406]
+cfg_ReCTS.IM_STD = [0.229, 0.224, 0.225]
+cfg_ReCTS.SEGLABEL_IGNORE_LABEL = 999
+cfg_ReCTS.CLASS_NUM = 2
+
+##########################
+#####  icdar2017rctw #####
+##########################
+
+cfg_icdar2017rctw = copy.deepcopy(cfg)
+cfg_icdar2017rctw.DATASET_NAME = 'icdar2017rctw'
+cfg_icdar2017rctw.ROOT_DIR = '/pool/bwjiang/controltext/Rethinking-Text-Segmentation/other_anytext_data/icdar2017rctw/images'
+cfg_icdar2017rctw.IM_MEAN = [0.485, 0.456, 0.406]
+cfg_icdar2017rctw.IM_STD = [0.229, 0.224, 0.225]
+cfg_icdar2017rctw.SEGLABEL_IGNORE_LABEL = 999
+cfg_icdar2017rctw.CLASS_NUM = 2
+
+##########################
+#####      Art       #####
+##########################
+
+cfg_art = copy.deepcopy(cfg)
+cfg_art.DATASET_NAME = 'art'
+cfg_art.ROOT_DIR = '/pool/bwjiang/controltext/Rethinking-Text-Segmentation/other_anytext_data/Art/images'
+cfg_art.IM_MEAN = [0.485, 0.456, 0.406]
+cfg_art.IM_STD = [0.229, 0.224, 0.225]
+cfg_art.SEGLABEL_IGNORE_LABEL = 999
+cfg_art.CLASS_NUM = 2
+
+##########################
+#####      LSVT      #####
+##########################
+
+cfg_lsvt = copy.deepcopy(cfg)
+cfg_lsvt.DATASET_NAME = 'LSVT'
+cfg_lsvt.ROOT_DIR = '/pool/bwjiang/controltext/Rethinking-Text-Segmentation/other_anytext_data/LSVT/images'
+cfg_lsvt.IM_MEAN = [0.485, 0.456, 0.406]
+cfg_lsvt.IM_STD = [0.229, 0.224, 0.225]
+cfg_lsvt.SEGLABEL_IGNORE_LABEL = 999
+cfg_lsvt.CLASS_NUM = 2
+
+
+##########################
+#####     mlt2019    #####
+##########################
+
+cfg_mlt2019 = copy.deepcopy(cfg)
+cfg_mlt2019.DATASET_NAME = 'mlt2019'
+cfg_mlt2019.ROOT_DIR = '/pool/bwjiang/controltext/Rethinking-Text-Segmentation/other_anytext_data/mlt2019/images'
+cfg_mlt2019.IM_MEAN = [0.485, 0.456, 0.406]
+cfg_mlt2019.IM_STD = [0.229, 0.224, 0.225]
+cfg_mlt2019.SEGLABEL_IGNORE_LABEL = 999
+cfg_mlt2019.CLASS_NUM = 2
+
 
 ########################
 #####    cocots    #####

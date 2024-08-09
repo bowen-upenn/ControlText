@@ -157,6 +157,34 @@ def set_cfg(cfg, dsname):
         cfg.DATA.LOADER_PIPELINE = [
             'NumpyImageLoader'
         ]
+    elif dsname == 'art':
+        cfg.DATA.LOADER_PIPELINE = [
+            'NumpyImageLoader'
+        ]
+    elif dsname == 'coco_text':
+        cfg.DATA.LOADER_PIPELINE = [
+            'NumpyImageLoader'
+        ]
+    elif dsname == 'icdar2017rctw':
+        cfg.DATA.LOADER_PIPELINE = [
+            'NumpyImageLoader'
+        ]
+    elif dsname == 'LSVT':
+        cfg.DATA.LOADER_PIPELINE = [
+            'NumpyImageLoader'
+        ]
+    elif dsname == 'mlt2019':
+        cfg.DATA.LOADER_PIPELINE = [
+            'NumpyImageLoader'
+        ]
+    elif dsname == 'MTWI2018':
+        cfg.DATA.LOADER_PIPELINE = [
+            'NumpyImageLoader'
+        ]
+    elif dsname == 'ReCTS':
+        cfg.DATA.LOADER_PIPELINE = [
+            'NumpyImageLoader'
+        ]
     else:
         raise ValueError
 
@@ -232,6 +260,8 @@ def set_cfg(cfg, dsname):
     cfg.TEST.FIND_N_WORST = 100
 
     if cfg.DATA.DATASET_NAME not in [dsname]:
+        print("cfg.DATA.DATASET_NAME ", cfg.DATA.DATASET_NAME)
+        print("dsname: ", dsname)
         raise ValueError
     if cfg.MODEL.MODEL_NAME not in ['texrnet']:
         raise ValueError

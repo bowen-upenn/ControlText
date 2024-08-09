@@ -11,7 +11,7 @@ from PIL import ImageFont
 from pytorch_lightning import seed_everything
 from cldm.model import create_model, load_state_dict
 from cldm.ddim_hacked import DDIMSampler
-from t3_dataset import draw_glyph, draw_glyph2, get_caption_pos
+from t3_dataset import draw_glyph, draw_glyph2, find_glyph, find_glyph2, get_caption_pos
 from dataset_util import load
 from tqdm import tqdm
 import argparse
@@ -115,8 +115,10 @@ def get_item(data_list, item):
         item_dict['texts'] = [cur_item['texts'][i][:max_chars] for i in sel_idxs]
         # glyphs
         for idx, text in enumerate(item_dict['texts']):
-            gly_line = draw_glyph(font, text)
-            glyphs = draw_glyph2(font, text, item_dict['polygons'][idx], scale=2)
+            glyphs = find_glyph2(all_glyphs_from_segmentation, item_dict['positions'][idx])
+            gly_line = find_glyph(glyphs, item_dict['polygons'][idx])
+            # gly_line = draw_glyph(font, text)
+            # glyphs = draw_glyph2(font, text, item_dict['polygons'][idx], scale=2)
             item_dict['glyphs'] += [glyphs]
             item_dict['gly_line'] += [gly_line]
         # mask_pos

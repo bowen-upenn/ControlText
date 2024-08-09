@@ -7,17 +7,6 @@ import time
 from PIL import Image, ImageDraw, ImageFont
 from torch.utils.data import Dataset, DataLoader
 from dataset_util import load, show_bbox_on_image
-import yaml
-import torch
-import argparse
-from torchvision import transforms
-import torch.distributed as dist
-from torch.nn.parallel import DistributedDataParallel as DDP
-
-from synthetic_dataset.unet_models import ModifiedUNet
-from synthetic_dataset.restore_from_transformations import recover_texts
-from ccd.Dino.model.dino_vision import DINO_Finetune
-from Dino.utils.utils import Config
 
 
 phrase_list = [
@@ -44,8 +33,6 @@ def insert_spaces(string, nSpace):
 
 
 def draw_glyph(font, text):
-    # This function creates an image with a single line of text that is centered and scaled to fit the image dimensions optimally
-    # TODO: perform our algorithms to recover texts and fonts from random perspective transformations and curvatures
     g_size = 50
     W, H = (512, 80)
     new_font = font.font_variant(size=g_size)
@@ -66,55 +53,9 @@ def draw_glyph(font, text):
     return img
 
 
-def draw_glyph_font_aware(img, mask, scene_text_segmentation_model, caption, transform): #unet_model_extract, unet_model_rectify
-    if torch.distributed.is_initialized():
-        current_rank = torch.distributed.get_rank()
-    else:
-        current_rank = 0  # Assuming it's the primary device or not using distributed training
-    print('current_rank image', current_rank)
-
-    with torch.no_grad():
-        # Extract texts from the background image
-        cv2.imwrite('img_'+caption+'.jpg', img * 255)
-        img[~mask] = 0.0   # only keep the text region corresponding to the largest polygon
-        print('img before', img.shape, np.min(img), np.mean(img), np.max(img))
-        # img = transform(img)
-        # img = 0.5 * (torch.as_tensor(img).permute(2, 0, 1).unsqueeze(0) + 1.0)
-        img = torch.as_tensor(img).permute(2, 0, 1).unsqueeze(0)
-        print('img after', img.shape, torch.min(img), torch.mean(img), torch.max(img))
-        img_text_only = scene_text_segmentation_model(img.to(current_rank), text=None, return_loss=False)
-        cv2.imwrite('img_text_only_'+caption+'.jpg', img_text_only[0].numpy().transpose(1, 2, 0) * 255)
-        print('img_text_only', img_text_only.shape)
-        return img_text_only
-
-        # # Recover the texts from perspective transformations and curvatures
-        # img_text_only = img_text_only.repeat(1, 3, 1, 1)
-        # print('img_text_only before', torch.min(img_text_only), torch.mean(img_text_only), torch.max(img_text_only))
-        # img_text_only = (img_text_only - torch.min(img_text_only)) / (torch.max(img_text_only) - torch.min(img_text_only))
-        # print('img_text_only after', torch.min(img_text_only), torch.mean(img_text_only), torch.max(img_text_only))
-        # predictions = unet_model_rectify(img_text_only)[0].numpy()
-        # img_text_only = img_text_only[0]
-        # pred_corners = predictions[0]
-        # pred_midline = predictions[1]
-        # pred_midline_endpoints = predictions[2]
-        # print('pred_corners', np.min(pred_corners), np.mean(pred_corners), np.max(pred_corners))
-        # cv2.imwrite('pred_corners_'+caption+'.jpg', pred_corners * 255)
-        # cv2.imwrite('pred_midline_'+caption+'.jpg', pred_midline * 255)
-        # cv2.imwrite('pred_midline_endpoints_'+caption+'.jpg', pred_midline_endpoints * 255)
-        #
-        # recovered_texts = recover_texts(img_text_only, pred_corners, pred_midline, pred_midline_endpoints, image_size=(512, 512), text_size=(512*0.9, 80*0.9))
-        # # print('recovered_texts before', recovered_texts.shape)
-        # recovered_texts = np.expand_dims(recovered_texts, axis=2).astype(np.float64)
-        # # print('recovered_texts after', recovered_texts.shape)
-        # return recovered_texts
-
-
 def draw_glyph2(font, text, polygon, vertAng=10, scale=1, width=512, height=512, add_space=True):
-    # This function is designed to fit text within the given polygon, considering rotations and potentially vertical orientation
-    # TODO: step 1: same as above in draw_glyph to recover texts and fonts
-    #       step 2: we know the box of the recovered texts, resize, recenter, and rotate it to fit the polygon
     enlarge_polygon = polygon*scale
-    rect = cv2.minAreaRect(enlarge_polygon) # a bounding rectangle that also considers the rotation
+    rect = cv2.minAreaRect(enlarge_polygon)
     box = cv2.boxPoints(rect)
     box = np.int0(box)
     w, h = rect[1]
@@ -181,52 +122,69 @@ def draw_glyph2(font, text, polygon, vertAng=10, scale=1, width=512, height=512,
     return img
 
 
-def draw_glyph2_font_aware(img, mask, polygon, unet_model_extract, unet_model_rectify):
-    enlarge_polygon = polygon * scale
-    rect = cv2.minAreaRect(enlarge_polygon)  # a bounding rectangle that also considers the rotation
+def load_all_glyphs(img_path):
+    # load the jpg image
+    img = cv2.imread(img_path)
+    return img[:, :, 0]
+
+
+def find_glyph(glyph_img, polygon):
+    W, H = (512, 80)
+
+    rect = cv2.minAreaRect(polygon)  # a bounding rectangle that also considers the rotation
     box = cv2.boxPoints(rect)
-    box = np.int0(box)
-    w, h = rect[1]
-    angle = rect[2]
+    box = np.int32(box)
 
-    if angle < -45:
-        angle += 90
-    angle = -angle
-    if w < h:
-        angle += 90
+    # Calculate the width and height of the box
+    box = order_points(box.astype(np.float32))
+    w = np.linalg.norm(box[0] - box[1])
+    h = np.linalg.norm(box[1] - box[2])
 
-    # Call draw_glyph_font_aware to get recovered texts
-    recovered_texts = draw_glyph_font_aware(img, mask, unet_model_extract, unet_model_rectify)
+    # Calculate the new rectangle dimensions
+    aspect_ratio = w / h
+    new_height = int(0.8 * H)
+    new_width = int(new_height * aspect_ratio)
 
-    # Prepare image canvas
-    img_height, img_width = img.shape[:2]
-    img_canvas = Image.new('RGB', (img_width, img_height), 'black')
-    draw = ImageDraw.Draw(img_canvas)
+    # aspect_ratio = w / h
+    # max_side_length = int(0.8 * 512)
+    # if w > h:
+    #     new_width = max_side_length
+    #     new_height = int(max_side_length / aspect_ratio)
+    # else:
+    #     new_height = max_side_length
+    #     new_width = int(max_side_length / aspect_ratio)
+    # print('w', w, 'h', h, 'box', box, 'new_width:', new_width, 'new_height:', new_height, 'aspect_ratio', aspect_ratio, 'name', data['img_name'][0])
 
-    # Resize the text image to fit the bounding box
-    text_img = Image.fromarray((recovered_texts.squeeze() * 255).astype(np.uint8))
-    text_img = text_img.resize((int(w), int(h)))
+    # Center the new rectangle
+    center_x, center_y = W // 2, H // 2  # Image center for 512x80 image
+    new_rect = np.array([
+        [center_x - new_width // 2, center_y - new_height // 2],
+        [center_x + new_width // 2, center_y - new_height // 2],
+        [center_x + new_width // 2, center_y + new_height // 2],
+        [center_x - new_width // 2, center_y + new_height // 2]
+    ], dtype=np.float32)
 
-    # Calculate the translation to center the text within the bounding rectangle
-    center_x, center_y = rect[0]
-    text_width, text_height = text_img.size
-    top_left_x = center_x - text_width // 2
-    top_left_y = center_y - text_height // 2
+    # Calculate the perspective transform matrix
+    old_rect_ordered = box
+    new_rect_ordered = new_rect.astype(np.float32)
+    M = cv2.getPerspectiveTransform(old_rect_ordered, new_rect_ordered)
 
-    # Create a rotated layer
-    rotated_layer = Image.new('RGBA', (img_width, img_height), (0, 0, 0, 0))
-    layer_draw = ImageDraw.Draw(rotated_layer)
-    rotated_layer.paste(text_img, (int(top_left_x), int(top_left_y)))
-
-    # Rotate the entire layer to align with the polygon
-    rotated_layer = rotated_layer.rotate(angle, expand=True, center=(center_x, center_y))
-
-    # Combine rotated text with the original image
-    img_canvas.paste(rotated_layer, (0, 0), rotated_layer)
-
-    return np.array(img_canvas)
+    # Apply the perspective transformation
+    transformed_img = cv2.warpPerspective(glyph_img, M, (W, H))
+    transformed_img = np.expand_dims(transformed_img, axis=2).astype(np.float64)
+    return transformed_img
 
 
+def find_glyph2(img, position):
+    # Convert the image to a numpy array
+    img = np.array(img)
+    img[img < 200] = 0.0
+    position = position.squeeze(-1)
+
+    # Apply the mask to the image, making pixels outside the polygon black
+    img = img * position
+    img = np.expand_dims(img, axis=2).astype(np.float64)
+    return img
 
 
 def get_caption_pos(ori_caption, pos_idxs, prob=1.0, place_holder='*'):
@@ -286,10 +244,24 @@ def rotate_point(point, center, angle):
     return int(x1), int(y1)
 
 
+def order_points(pts):
+    rect = np.zeros((4, 2), dtype="float32")
+
+    s = pts.sum(axis=1)
+    rect[0] = pts[np.argmin(s)]
+    rect[2] = pts[np.argmax(s)]
+
+    diff = np.diff(pts, axis=1)
+    rect[1] = pts[np.argmin(diff)]
+    rect[3] = pts[np.argmax(diff)]
+    return rect
+
+
 class T3DataSet(Dataset):
     def __init__(
             self,
             json_path,
+            glyph_path,
             max_lines=5,
             max_chars=20,
             place_holder='*',
@@ -307,6 +279,11 @@ class T3DataSet(Dataset):
         assert isinstance(json_path, (str, list))
         if isinstance(json_path, str):
             json_path = [json_path]
+        assert isinstance(glyph_path, (str, list))
+        if isinstance(glyph_path, str):
+            glyph_path = [glyph_path]
+        assert len(json_path) == len(glyph_path)
+
         data_list = []
         self.using_dlc = using_dlc
         self.max_lines = max_lines
@@ -319,142 +296,17 @@ class T3DataSet(Dataset):
         self.for_show = for_show
         self.glyph_scale = glyph_scale
         self.wm_thresh = wm_thresh
-        for jp in json_path:
-            data_list += self.load_data(jp, percent)
+
+        for jp, gp in zip(json_path, glyph_path):
+            data_list += self.load_data(jp, gp, percent)
         self.data_list = data_list
         print(f'All dataset loaded, imgs={len(self.data_list)}')
+
         self.debug = debug
         if self.debug:
             self.tmp_items = [i for i in range(100)]
 
-        # self.unet_model_extract, self.unet_model_rectify = self.setup_model_to_recover_condition_maps()
-        self.scene_text_segmentation_model = self.setup_model_to_recover_condition_maps()
-        self.transform = transforms.Compose([transforms.ToTensor(),
-                                             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
-
-    def setup_model_to_recover_condition_maps(self):
-        try:
-            # with open('./ccd/Dino/configs/CCD_vision_model_ARD.yaml', 'r') as file:
-            with open('./synthetic_dataset/unet_train_config.yaml', 'r') as file:
-                unet_args = yaml.safe_load(file)
-        except Exception as e:
-            print('Error reading the unet config file')
-
-        # def _parse_arguments(config):
-        #     parser = argparse.ArgumentParser()
-        #     parser.add_argument('-b', '--batch_size', type=int, default=None,
-        #                         help='batch size')
-        #     parser.add_argument('--run_only_test', action='store_true', default=None,
-        #                         help='flag to run only test and skip training')
-        #     parser.add_argument('--test_root', type=str, default=None,
-        #                         help='path to test datasets')
-        #     parser.add_argument('--checkpoint', type=str, default=None,
-        #                         help='path to model checkpoint')
-        #     parser.add_argument('--vision_checkpoint', type=str, default=None,
-        #                         help='path to vision model pretrained')
-        #     parser.add_argument('--debug', action='store_true', default=None,
-        #                         help='flag for running on debug without saving model checkpoints')
-        #     parser.add_argument('--model_eval', type=str, default=None,
-        #                         choices=['alignment', 'vision', 'language'],
-        #                         help='model decoder that outputs predictions')
-        #     parser.add_argument('--workdir', type=str, default=None,
-        #                         help='path to workdir folder')
-        #     parser.add_argument('--subworkdir', type=str, default=None,
-        #                         help='optional prefix to workdir path')
-        #     parser.add_argument('--epochs', type=int, default=None,
-        #                         help='number of training epochs')
-        #     parser.add_argument('--eval_iters', type=int, default=None,
-        #                         help='evaluate performance on validation set every this number iterations')
-        #     args = parser.parse_args()
-        #
-        #     if args.batch_size is not None:
-        #         config.dataset_train_batch_size = args.batch_size
-        #         config.dataset_valid_batch_size = args.batch_size
-        #         config.dataset_test_batch_size = args.batch_size
-        #     if args.run_only_test is not None:
-        #         config.global_phase = 'Test' if args.run_only_test else 'Train'
-        #     if args.test_root is not None:
-        #         config.dataset_test_roots = [args.test_root]
-        #     args_to_config_dict = {
-        #         'checkpoint': 'model_checkpoint',
-        #         'vision_checkpoint': 'model_vision_checkpoint',
-        #         'debug': 'global_debug',
-        #         'model_eval': 'model_eval',
-        #         'workdir': 'global_workdir',
-        #         'subworkdir': 'global_subworkdir',
-        #         'epochs': 'training_epochs',
-        #         'eval_iters': 'training_eval_iters',
-        #     }
-        #     for args_attr, config_attr in args_to_config_dict.items():
-        #         if getattr(args, args_attr) is not None:
-        #             setattr(config, config_attr, getattr(args, args_attr))
-        #
-        #     return config
-
-        def _remove_module_prefix(state_dict):
-            # if the unet is trained using DDP, the model is saved with "module." prefix
-            new_state_dict = {}
-            for key, value in state_dict.items():
-                if key.startswith("module."):
-                    new_key = key[7:]  # Remove the "module." prefix
-                else:
-                    new_key = key
-                new_state_dict[new_key] = value
-            return new_state_dict
-
-        #     config = Config('./ccd/Dino/configs/CCD_pretrain_ViT_Base.yaml')
-        #     config.global_phase = 'Test'
-        #     config = _parse_arguments(config)
-        #
-        #     if torch.distributed.is_initialized():
-        #         current_rank = torch.distributed.get_rank()
-        #     else:
-        #         current_rank = 0  # Assuming it's the primary device or not using distributed training
-        #     print('current_rank model', current_rank)
-        #     model = DINO_Finetune(config).to(current_rank)
-        #
-        #     pretrained_state_dict = torch.load('./ccd/Dino/saved_models/Base_ARD_checkpoint.pth')
-        #     pretrained_state_dict['net'] = _remove_module_prefix(pretrained_state_dict['net'])
-        #     model.load_state_dict(pretrained_state_dict['net'])
-        #     model.eval()
-        #
-        # return model
-
-        def _load_unet_model(unet_args, current_rank, step):
-            # Build the UNet model
-            unet_model = torch.hub.load('mateuszbuda/brain-segmentation-pytorch', 'unet',
-                                        in_channels=3, out_channels=unet_args['model']['out_channels'], init_features=32, pretrained=False)
-            base_model_final_channels = unet_args['model']['out_channels']
-            unet_model = ModifiedUNet(unet_model, base_model_final_channels=base_model_final_channels, step=step, deformable=False)
-            # unet_model = unet_model.to(current_rank)
-            unet_model.eval()
-
-            # map_location = {'cuda:%d' % current_rank: 'cuda:%d' % 0}
-            checkpoint = torch.load('synthetic_dataset/' + unet_args['training']['checkpoint_path'] + '/unet_model_' + step + '_' +
-                                     str(unet_args['training']['ckpt_epoch_'+step]) + '.pth')#, map_location=map_location)
-            checkpoint = _remove_module_prefix(checkpoint)
-            unet_model.load_state_dict(checkpoint)
-            print('Loaded checkpoint from %s. Step %s' % (unet_args['training']['checkpoint_path'], step))
-            return unet_model
-
-        try:
-            with open('synthetic_dataset/unet_train_config.yaml', 'r') as file:
-                unet_args = yaml.safe_load(file)
-        except Exception as e:
-            print('Error reading the unet config file')
-
-        with torch.no_grad():
-            if torch.distributed.is_initialized():
-                current_rank = torch.distributed.get_rank()
-            else:
-                current_rank = 0  # Assuming it's the primary device or not using distributed training
-
-            unet_model_extract = _load_unet_model(unet_args, current_rank, step='extract')
-            # unet_model_rectify = _load_unet_model(unet_args, current_rank, step='rectify')
-
-        return unet_model_extract
-
-    def load_data(self, json_path, percent):
+    def load_data(self, json_path, glyph_path, percent):
         tic = time.time()
         content = load(json_path)
         d = []
@@ -471,8 +323,11 @@ class T3DataSet(Dataset):
             if self.using_dlc:
                 data_root = data_root.replace('/data/vdb', '/mnt/data', 1)
             img_path = os.path.join(data_root, gt['img_name'])
+            glyphs_path = os.path.join(glyph_path, gt['img_name'])
+
             info = {}
             info['img_path'] = img_path
+            info['glyphs_path'] = glyphs_path
             info['caption'] = gt['caption'] if 'caption' in gt else ''
             if self.place_holder in info['caption']:
                 count += 1
@@ -538,48 +393,34 @@ class T3DataSet(Dataset):
                 pos_idxs = [cur_item['pos'][i] for i in sel_idxs]
             else:
                 pos_idxs = [-1 for i in sel_idxs]
-
             item_dict['caption'] = get_caption_pos(item_dict['caption'], pos_idxs, self.caption_pos_porb, self.place_holder)
             item_dict['polygons'] = [cur_item['polygons'][i] for i in sel_idxs]
-            item_dict['areas'] = [cv2.contourArea(cur_item['polygons'][i]) for i in sel_idxs]
+            item_dict['texts'] = [cur_item['texts'][i][:self.max_chars] for i in sel_idxs]
+            item_dict['language'] = [cur_item['language'][i] for i in sel_idxs]
 
-            # mask_pos, only draw the largest polygon
-            # find the index of the largest area
-            largest_area_idx = item_dict['areas'].index(max(item_dict['areas']))   # the index in sel_idxs
-            largest_polygon = item_dict['polygons'][largest_area_idx]
-            item_dict['positions'] += [self.draw_pos(largest_polygon, self.mask_pos_prob)]
-            # for polygon in item_dict['polygons']:
-            #     item_dict['positions'] += [self.draw_pos(polygon, self.mask_pos_prob)]
+            # mask_pos
+            for polygon in item_dict['polygons']:
+                item_dict['positions'] += [self.draw_pos(polygon, self.mask_pos_prob)]
 
-            # glyphs, only draw the glyphs in the largest polygon
-            largest_polygon_mask = self.draw_inv_mask([largest_polygon])[:, :, 0].astype(bool)
-            gly_line = draw_glyph_font_aware(target, largest_polygon_mask, self.scene_text_segmentation_model, cur_item['caption'], self.transform)
-            # gly_line = draw_glyph_font_aware(target, largest_polygon_mask, self.unet_model_extract, self.unet_model_rectify, cur_item['caption'], self.transform)
-            glyphs = draw_glyph2_font_aware(target, largest_polygon_mask, largest_polygon, self.unet_model_extract, self.unet_model_rectify)
+            # glyphs
+            all_glyphs_from_segmentation = load_all_glyphs(cur_item['glyphs_path'])
+            for idx, text in enumerate(item_dict['texts']):
+                glyphs = find_glyph2(all_glyphs_from_segmentation, item_dict['positions'][idx])
+                gly_line = find_glyph(glyphs, item_dict['polygons'][idx])
+                item_dict['glyphs'] += [glyphs]
+                item_dict['gly_line'] += [gly_line]
 
-            # text_in_largest_polygon = item_dict['texts'][largest_area_idx]
-            # gly_line = draw_glyph(self.font, text_in_largest_polygon)
-            # glyphs = draw_glyph2(self.font, text_in_largest_polygon, largest_polygon, scale=self.glyph_scale)
-            item_dict['glyphs'] += [glyphs]
-            item_dict['gly_line'] += [gly_line]
             # for idx, text in enumerate(item_dict['texts']):
             #     gly_line = draw_glyph(self.font, text)
             #     glyphs = draw_glyph2(self.font, text, item_dict['polygons'][idx], scale=self.glyph_scale)
             #     item_dict['glyphs'] += [glyphs]
             #     item_dict['gly_line'] += [gly_line]
 
-            # only keep the ones for the largest polygon
-            item_dict['texts'] = [cur_item['texts'][i][:self.max_chars] for i in sel_idxs if i == largest_area_idx]
-            item_dict['language'] = [cur_item['language'][i] for i in sel_idxs if i == largest_area_idx]
-            # item_dict['texts'] = [cur_item['texts'][i][:self.max_chars] for i in sel_idxs]
-            # item_dict['language'] = [cur_item['language'][i] for i in sel_idxs]
-
         # inv_mask
         invalid_polygons = cur_item['invalid_polygons'] if 'invalid_polygons' in cur_item else []
         if len(texts) > 0:
             invalid_polygons += [cur_item['polygons'][i] for i in unsel_idxs]
         item_dict['inv_mask'] = self.draw_inv_mask(invalid_polygons)
-
         item_dict['hint'] = self.get_hint(item_dict['positions'])
         if random.random() < self.mask_img_prob:
             # randomly generate 0~3 masks
@@ -671,12 +512,13 @@ if __name__ == '__main__':
     os.makedirs(show_imgs_dir)
     plt.rcParams['axes.unicode_minus'] = False
     json_paths = [
-        '/path/of/your/dataset/data1.json',
-        '/path/of/your/dataset/data2.json',
-        # ...
+        '/tmp/datasets/AnyWord-3M/link_download/laion/test_data_v1.1.json'
+    ]
+    glyph_paths = [
+        r'/tmp/datasets/AnyWord-3M/link_download/laion/laion_test'
     ]
 
-    dataset = T3DataSet(json_paths, for_show=True, max_lines=20, glyph_scale=2, mask_img_prob=1.0, caption_pos_prob=0.0)
+    dataset = T3DataSet(json_paths, glyph_paths, for_show=True, max_lines=20, glyph_scale=2, mask_img_prob=1.0, caption_pos_prob=0.0)
     train_loader = DataLoader(dataset=dataset, batch_size=1, shuffle=False, num_workers=0)
     pbar = tqdm(total=show_count)
     for i, data in enumerate(train_loader):

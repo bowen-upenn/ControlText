@@ -34,7 +34,14 @@ from configs.cfg_dataset import (
     cfg_wukong_2of5,
     cfg_wukong_3of5,
     cfg_wukong_4of5,
-    cfg_wukong_5of5
+    cfg_wukong_5of5,
+    cfg_art,
+    cfg_cocotext,
+    cfg_icdar2017rctw,
+    cfg_lsvt,
+    cfg_mlt2019,
+    cfg_MTWI2018,
+    cfg_ReCTS
 )
 from configs.cfg_model import cfg_texrnet as cfg_mdel
 from configs.cfg_base import cfg_train, cfg_test
@@ -117,9 +124,26 @@ if __name__ == '__main__':
         cfg_data = cfg_wukong_4of5
     elif args.dsname == 'wukong_5of5':
         cfg_data = cfg_wukong_5of5
+    elif args.dsname == 'art':
+        cfg_data = cfg_art
+    elif args.dsname == 'coco_text':
+        cfg_data = cfg_cocotext
+    elif args.dsname == 'icdar2017rctw':
+        cfg_data = cfg_icdar2017rctw
+    elif args.dsname == 'LSVT':
+        cfg_data = cfg_lsvt
+    elif args.dsname == 'mlt2019':
+        cfg_data = cfg_mlt2019
+    elif args.dsname == 'MTWI2018':
+        cfg_data = cfg_MTWI2018
+    elif args.dsname == 'ReCTS':
+        cfg_data = cfg_ReCTS
 
     else:
         raise ValueError
+
+    print("args.dsname in main: ", args.dsname)
+    print("cfg_data in main: ", cfg_data)
 
     cfg.DEBUG = args.debug
     cfg.DIST_URL = 'tcp://127.0.0.1:{}'.format(args.port)
@@ -186,6 +210,20 @@ if __name__ == '__main__':
         elif args.dsname == 'wukong_4of5':
             cfg.DATA.DATASET_MODE = 'test'
         elif args.dsname == 'wukong_5of5':
+            cfg.DATA.DATASET_MODE = 'test'
+        elif args.dsname == 'art':
+            cfg.DATA.DATASET_MODE = 'test'
+        elif args.dsname == 'coco_text':
+            cfg.DATA.DATASET_MODE = 'test'
+        elif args.dsname == 'icdar2017rctw':
+            cfg.DATA.DATASET_MODE = 'test'
+        elif args.dsname == 'LSVT' or args.dsname == 'lsvt':
+            cfg.DATA.DATASET_MODE = 'test'
+        elif args.dsname == 'mlt2019':
+            cfg.DATA.DATASET_MODE = 'test'
+        elif args.dsname == 'MTWI2018':
+            cfg.DATA.DATASET_MODE = 'test'
+        elif args.dsname == 'ReCTS':
             cfg.DATA.DATASET_MODE = 'test'
 
         else:
