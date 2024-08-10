@@ -50,6 +50,7 @@ def draw_glyph(font, text):
     y = (img.height - text_height) // 2 - offset_y//2
     draw.text((x, y), text, font=new_font, fill='white')
     img = np.expand_dims(np.array(img), axis=2).astype(np.float64)
+    print('img glyph', img.shape)
     return img
 
 
@@ -119,6 +120,7 @@ def draw_glyph2(font, text, polygon, vertAng=10, scale=1, width=512, height=512,
     y_offset = int((img.height - rotated_layer.height) / 2)
     img.paste(rotated_layer, (x_offset, y_offset), rotated_layer)
     img = np.expand_dims(np.array(img.convert('1')), axis=2).astype(np.float64)
+    print('img glyph2', img.shape)
     return img
 
 
@@ -175,11 +177,17 @@ def find_glyph(glyph_img, polygon):
     return transformed_img
 
 
-def find_glyph2(img, position):
+def find_glyph2(img, position, scale=1):
     # Convert the image to a numpy array
     img = np.array(img)
     img[img < 200] = 0.0
     position = position.squeeze(-1)
+
+    if scale != 1:
+        # Scale the image using interpolation
+        new_size = (int(img.shape[1] * scale), int(img.shape[0] * scale))  # (width, height)
+        img = cv2.resize(img, new_size, interpolation=cv2.INTER_LINEAR)  # Using bilinear interpolation
+        position = cv2.resize(position, new_size, interpolation=cv2.INTER_LINEAR)
 
     # Apply the mask to the image, making pixels outside the polygon black
     img = img * position
@@ -298,7 +306,11 @@ class T3DataSet(Dataset):
         self.wm_thresh = wm_thresh
 
         for jp, gp in zip(json_path, glyph_path):
-            data_list += self.load_data(jp, gp, percent)
+            if isinstance(gp, list):    # laion_p1 to laion_p5
+                for gp_split in gp:
+                    data_list += self.load_data(jp, gp_split, percent)
+            else:
+                data_list += self.load_data(jp, gp, percent)
         self.data_list = data_list
         print(f'All dataset loaded, imgs={len(self.data_list)}')
 
@@ -405,7 +417,7 @@ class T3DataSet(Dataset):
             # glyphs
             all_glyphs_from_segmentation = load_all_glyphs(cur_item['glyphs_path'])
             for idx, text in enumerate(item_dict['texts']):
-                glyphs = find_glyph2(all_glyphs_from_segmentation, item_dict['positions'][idx])
+                glyphs = find_glyph2(all_glyphs_from_segmentation, item_dict['positions'][idx], scale=self.glyph_scale)
                 gly_line = find_glyph(glyphs, item_dict['polygons'][idx])
                 item_dict['glyphs'] += [glyphs]
                 item_dict['gly_line'] += [gly_line]
