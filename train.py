@@ -69,7 +69,7 @@ if __name__ == '__main__':
         # r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/ReCTS/data.json'
     ]
     glyph_paths = [
-        r'/tmp/datasets/AnyWord-3M/link_download/laion/laion_test',
+        r'./Rethinking-Text-Segmentation/log/images/output/laion_test',
         # [r'./Rethinking-Text-Segmentation/log/images/output/laion_p1',
         # r'./Rethinking-Text-Segmentation/log/images/output/laion_p2',
         # r'./Rethinking-Text-Segmentation/log/images/output/laion_p3',

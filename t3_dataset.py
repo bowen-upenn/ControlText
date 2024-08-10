@@ -51,7 +51,7 @@ def draw_glyph(font, text):
     y = (img.height - text_height) // 2 - offset_y//2
     draw.text((x, y), text, font=new_font, fill='white')
     img = np.expand_dims(np.array(img), axis=2).astype(np.float64)
-    print('img glyph', img.shape)
+    # print('img', np.min(img), np.max(img), img.dtype)
     return img
 
 
@@ -121,14 +121,16 @@ def draw_glyph2(font, text, polygon, vertAng=10, scale=1, width=512, height=512,
     y_offset = int((img.height - rotated_layer.height) / 2)
     img.paste(rotated_layer, (x_offset, y_offset), rotated_layer)
     img = np.expand_dims(np.array(img.convert('1')), axis=2).astype(np.float64)
-    print('img glyph2', img.shape)
+    # print('img2', np.min(img), np.max(img), img.dtype)
     return img
 
 
 def load_all_glyphs(img_path):
     # load the jpg image
-    img = cv2.imread(img_path)
-    img = img[:, :, 0]
+    img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+    img = (img - np.min(img)) / (np.max(img) - np.min(img))
+    img[img < 0.5] = 0
+    img[img >= 0.5] = 1
     return img
 
 
@@ -183,10 +185,12 @@ def find_glyph(glyph_img, polygon, scale=1):
     return transformed_img
 
 
-def find_glyph2(img, position, scale=1, add_perturbation=True, max_offset=16):
+def find_glyph2(img, position, scale=1, add_perturbation=False, max_offset=16):
     # Convert the image to a numpy array
     img = np.array(img)
-    img[img < 150] = 0.0
+    # print(np.min(img), np.max(img))
+    # print(np.min(position), np.max(position))
+    # img[img < 150] = 0.0
     rows, cols = img.shape
 
     position = position.squeeze(-1)
@@ -231,6 +235,7 @@ def find_glyph2(img, position, scale=1, add_perturbation=True, max_offset=16):
         img_perturbed = np.expand_dims(img_perturbed, axis=2).astype(np.float64)
         position_perturbed = np.expand_dims(position_perturbed, axis=-1)
 
+        print('img2', np.min(img_perturbed), np.max(img_perturbed), img_perturbed.dtype)
         return img_perturbed, img, position_perturbed
     else:
         return img, None, None
@@ -571,13 +576,13 @@ if __name__ == '__main__':
     os.makedirs(show_imgs_dir)
     plt.rcParams['axes.unicode_minus'] = False
     json_paths = [
-        '/tmp/datasets/AnyWord-3M/link_download/laion/test_data_v1.1.json'
+        r'/tmp/datasets/AnyWord-3M/link_download/laion/test_data_v1.1.json',
     ]
     glyph_paths = [
-        r'/tmp/datasets/AnyWord-3M/link_download/laion/laion_test'
+        r'./Rethinking-Text-Segmentation/log/images/output/laion_test',
     ]
 
-    dataset = T3DataSet(json_paths, glyph_paths, for_show=True, max_lines=20, glyph_scale=1, mask_img_prob=1.0, caption_pos_prob=0.0)
+    dataset = T3DataSet(json_paths, glyph_paths, for_show=True, max_lines=20, glyph_scale=2, mask_img_prob=1.0, caption_pos_prob=0.0)
     train_loader = DataLoader(dataset=dataset, batch_size=1, shuffle=False, num_workers=0)
     pbar = tqdm(total=show_count)
     for i, data in enumerate(train_loader):
