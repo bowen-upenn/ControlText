@@ -53,43 +53,44 @@ if __name__ == '__main__':
         mode="max",
     )
     json_paths = [
-        r'/tmp/datasets/AnyWord-3M/link_download/laion/test_data_v1.1.json',
-        # r'/tmp/datasets/AnyWord-3M/link_download/laion/data_v1.1.json',
-        # r'/tmp/datasets/AnyWord-3M/link_download/wukong_1of5/data_v1.1.json',
-        # r'/tmp/datasets/AnyWord-3M/link_download/wukong_2of5/data_v1.1.json',
-        # r'/tmp/datasets/AnyWord-3M/link_download/wukong_3of5/data_v1.1.json',
-        # r'/tmp/datasets/AnyWord-3M/link_download/wukong_4of5/data_v1.1.json',
-        # r'/tmp/datasets/AnyWord-3M/link_download/wukong_5of5/data_v1.1.json',
-        # r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/Art/data.json',
-        # r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/COCO_Text/data.json',
-        # r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/icdar2017rctw/data.json',
-        # r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/LSVT/data.json',
-        # r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/mlt2019/data.json',
-        # r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/MTWI2018/data.json',
-        # r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/ReCTS/data.json'
+        # r'/tmp/datasets/AnyWord-3M/link_download/laion/test_data_v1.1.json',
+        r'/tmp/datasets/AnyWord-3M/link_download/laion/data_v1.1.json',
+        r'/tmp/datasets/AnyWord-3M/link_download/wukong_1of5/data_v1.1.json',
+        r'/tmp/datasets/AnyWord-3M/link_download/wukong_2of5/data_v1.1.json',
+        r'/tmp/datasets/AnyWord-3M/link_download/wukong_3of5/data_v1.1.json',
+        r'/tmp/datasets/AnyWord-3M/link_download/wukong_4of5/data_v1.1.json',
+        r'/tmp/datasets/AnyWord-3M/link_download/wukong_5of5/data_v1.1.json',
+        r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/Art/data.json',
+        r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/COCO_Text/data.json',
+        r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/icdar2017rctw/data.json',
+        r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/LSVT/data.json',
+        r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/mlt2019/data.json',
+        r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/MTWI2018/data.json',
+        r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/ReCTS/data.json'
     ]
     glyph_paths = [
-        r'./Rethinking-Text-Segmentation/log/images/output/laion_test',
-        # [r'./Rethinking-Text-Segmentation/log/images/output/laion_p1',
-        # r'./Rethinking-Text-Segmentation/log/images/output/laion_p2',
-        # r'./Rethinking-Text-Segmentation/log/images/output/laion_p3',
-        # r'./Rethinking-Text-Segmentation/log/images/output/laion_p4',
-        # r'./Rethinking-Text-Segmentation/log/images/output/laion_p5'],
-        # r'./Rethinking-Text-Segmentation/log/images/output/wukong_1of5_p1',
-        # r'./Rethinking-Text-Segmentation/log/images/output/wukong_1of5_p2',
-        # r'./Rethinking-Text-Segmentation/log/images/output/wukong_1of5_p3',
-        # r'./Rethinking-Text-Segmentation/log/images/output/wukong_1of5_p4',
-        # r'./Rethinking-Text-Segmentation/log/images/output/wukong_1of5_p5',
-        # r'./Rethinking-Text-Segmentation/log/images/output/Art',
-        # r'./Rethinking-Text-Segmentation/log/images/output/COCO_Text',
-        # r'./Rethinking-Text-Segmentation/log/images/output/icdar2017rctw',
-        # r'./Rethinking-Text-Segmentation/log/images/output/LSVT',
-        # r'./Rethinking-Text-Segmentation/log/images/output/mlt2019',
-        # r'./Rethinking-Text-Segmentation/log/images/output/MTWI2018',
-        # r'./Rethinking-Text-Segmentation/log/images/output/ReCTS'
+        # r'./Rethinking-Text-Segmentation/log/images/output/laion_test',
+        [r'./Rethinking-Text-Segmentation/log/images/output/laion_p1',
+        r'./Rethinking-Text-Segmentation/log/images/output/laion_p2',
+        r'./Rethinking-Text-Segmentation/log/images/output/laion_p3',
+        r'./Rethinking-Text-Segmentation/log/images/output/laion_p4',
+        r'./Rethinking-Text-Segmentation/log/images/output/laion_p5'],
+        r'./Rethinking-Text-Segmentation/log/images/output/wukong_1of5_p1',
+        r'./Rethinking-Text-Segmentation/log/images/output/wukong_1of5_p2',
+        r'./Rethinking-Text-Segmentation/log/images/output/wukong_1of5_p3',
+        r'./Rethinking-Text-Segmentation/log/images/output/wukong_1of5_p4',
+        r'./Rethinking-Text-Segmentation/log/images/output/wukong_1of5_p5',
+        r'./Rethinking-Text-Segmentation/log/images/output/Art',
+        r'./Rethinking-Text-Segmentation/log/images/output/COCO_Text',
+        r'./Rethinking-Text-Segmentation/log/images/output/icdar2017rctw',
+        r'./Rethinking-Text-Segmentation/log/images/output/LSVT',
+        r'./Rethinking-Text-Segmentation/log/images/output/mlt2019',
+        r'./Rethinking-Text-Segmentation/log/images/output/MTWI2018',
+        r'./Rethinking-Text-Segmentation/log/images/output/ReCTS'
     ]
     dataset = T3DataSet(json_paths, glyph_paths, max_lines=5, max_chars=20, caption_pos_prob=0.0, mask_pos_prob=1.0, mask_img_prob=mask_ratio, glyph_scale=2, percent=dataset_percent, debug=False, using_dlc=False, wm_thresh=wm_thresh)
     dataloader = DataLoader(dataset, num_workers=4, persistent_workers=True, batch_size=batch_size, shuffle=True)
     logger = ImageLogger(batch_frequency=logger_freq)
     trainer = pl.Trainer(gpus=-1, precision=32, max_epochs=max_epochs, num_nodes=NUM_NODES, accumulate_grad_batches=grad_accum, callbacks=[logger, checkpoint_callback], default_root_dir=root_dir, strategy='ddp')
+    print('Start training...')
     trainer.fit(model, dataloader, ckpt_path=ckpt_path)
