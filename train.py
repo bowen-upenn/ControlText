@@ -80,13 +80,13 @@ if __name__ == '__main__':
         # r'./Rethinking-Text-Segmentation/log/images/output/wukong_1of5_p3',
         # r'./Rethinking-Text-Segmentation/log/images/output/wukong_1of5_p4',
         # r'./Rethinking-Text-Segmentation/log/images/output/wukong_1of5_p5',
-        # r'./Rethinking-Text-Segmentation/other_anytext_data/Art',
-        # r'./Rethinking-Text-Segmentation/other_anytext_data/COCO_Text',
-        # r'./Rethinking-Text-Segmentation/other_anytext_data/icdar2017rctw',
-        # r'./Rethinking-Text-Segmentation/other_anytext_data/LSVT',
-        # r'./Rethinking-Text-Segmentation/other_anytext_data/mlt2019',
-        # r'./Rethinking-Text-Segmentation/other_anytext_data/MTWI2018',
-        # r'./Rethinking-Text-Segmentation/other_anytext_data/ReCTS'
+        # r'./Rethinking-Text-Segmentation/log/images/output/Art',
+        # r'./Rethinking-Text-Segmentation/log/images/output/COCO_Text',
+        # r'./Rethinking-Text-Segmentation/log/images/output/icdar2017rctw',
+        # r'./Rethinking-Text-Segmentation/log/images/output/LSVT',
+        # r'./Rethinking-Text-Segmentation/log/images/output/mlt2019',
+        # r'./Rethinking-Text-Segmentation/log/images/output/MTWI2018',
+        # r'./Rethinking-Text-Segmentation/log/images/output/ReCTS'
     ]
     dataset = T3DataSet(json_paths, glyph_paths, max_lines=5, max_chars=20, caption_pos_prob=0.0, mask_pos_prob=1.0, mask_img_prob=mask_ratio, glyph_scale=2, percent=dataset_percent, debug=False, using_dlc=False, wm_thresh=wm_thresh)
     dataloader = DataLoader(dataset, num_workers=4, persistent_workers=True, batch_size=batch_size, shuffle=True)

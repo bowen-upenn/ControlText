@@ -4,6 +4,7 @@ import cv2
 import random
 import math
 import time
+import random
 from PIL import Image, ImageDraw, ImageFont
 from torch.utils.data import Dataset, DataLoader
 from dataset_util import load, show_bbox_on_image
@@ -127,10 +128,15 @@ def draw_glyph2(font, text, polygon, vertAng=10, scale=1, width=512, height=512,
 def load_all_glyphs(img_path):
     # load the jpg image
     img = cv2.imread(img_path)
-    return img[:, :, 0]
+    img = img[:, :, 0]
+    return img
 
 
-def find_glyph(glyph_img, polygon):
+def find_glyph(glyph_img, polygon, scale=1):
+    if scale != 1:
+        new_size = (int(glyph_img.shape[1] / scale), int(glyph_img.shape[0] / scale))  # (width, height)
+        glyph_img = cv2.resize(glyph_img, new_size, interpolation=cv2.INTER_LINEAR)
+
     W, H = (512, 80)
 
     rect = cv2.minAreaRect(polygon)  # a bounding rectangle that also considers the rotation
@@ -177,11 +183,14 @@ def find_glyph(glyph_img, polygon):
     return transformed_img
 
 
-def find_glyph2(img, position, scale=1):
+def find_glyph2(img, position, scale=1, add_perturbation=True, max_offset=16):
     # Convert the image to a numpy array
     img = np.array(img)
-    img[img < 200] = 0.0
+    img[img < 150] = 0.0
+    rows, cols = img.shape
+
     position = position.squeeze(-1)
+    raw_position = position.copy()
 
     if scale != 1:
         # Scale the image using interpolation
@@ -191,8 +200,40 @@ def find_glyph2(img, position, scale=1):
 
     # Apply the mask to the image, making pixels outside the polygon black
     img = img * position
-    img = np.expand_dims(img, axis=2).astype(np.float64)
-    return img
+
+    # Undo the scaling of the position mask for downstream processing
+    position = raw_position
+
+    if add_perturbation:
+        # Add slight random perspective transformations to the image and the position mask
+        pts1 = np.float32([[0, 0], [cols * scale, 0], [0, rows * scale], [cols * scale, rows * scale]])
+        pts2 = pts1 + np.float32([
+            [random.uniform(-max_offset * scale, 0), random.uniform(-max_offset * scale, 0)],  # Top-left
+            [random.uniform(0, max_offset * scale), random.uniform(-max_offset * scale, 0)],   # Top-right
+            [random.uniform(-max_offset * scale, 0), random.uniform(0, max_offset * scale)],   # Bottom-left
+            [random.uniform(0, max_offset * scale), random.uniform(0, max_offset * scale)]     # Bottom-right
+        ])
+        M_perspective_img = cv2.getPerspectiveTransform(pts1, pts2)
+
+        pts3 = np.float32([[0, 0], [cols, 0], [0, rows], [cols, rows]])
+        pts4 = pts3 + np.float32([
+            [random.uniform(-max_offset, 0), random.uniform(-max_offset, 0)],  # Top-left
+            [random.uniform(0, max_offset), random.uniform(-max_offset, 0)],   # Top-right
+            [random.uniform(-max_offset, 0), random.uniform(0, max_offset)],   # Bottom-left
+            [random.uniform(0, max_offset), random.uniform(0, max_offset)]     # Bottom-right
+        ])
+        M_perspective_pos = cv2.getPerspectiveTransform(pts3, pts4)
+
+        # Apply the perspective transformation to both the image and the position mask
+        img_perturbed = cv2.warpPerspective(img, M_perspective_img, (cols * scale, rows * scale))
+        position_perturbed = cv2.warpPerspective(position, M_perspective_pos, (cols, rows))
+
+        img_perturbed = np.expand_dims(img_perturbed, axis=2).astype(np.float64)
+        position_perturbed = np.expand_dims(position_perturbed, axis=-1)
+
+        return img_perturbed, img, position_perturbed
+    else:
+        return img, None, None
 
 
 def get_caption_pos(ori_caption, pos_idxs, prob=1.0, place_holder='*'):
@@ -339,6 +380,7 @@ class T3DataSet(Dataset):
 
             info = {}
             info['img_path'] = img_path
+            info['img_name'] = gt['img_name']
             info['glyphs_path'] = glyphs_path
             info['caption'] = gt['caption'] if 'caption' in gt else ''
             if self.place_holder in info['caption']:
@@ -417,8 +459,13 @@ class T3DataSet(Dataset):
             # glyphs
             all_glyphs_from_segmentation = load_all_glyphs(cur_item['glyphs_path'])
             for idx, text in enumerate(item_dict['texts']):
-                glyphs = find_glyph2(all_glyphs_from_segmentation, item_dict['positions'][idx], scale=self.glyph_scale)
-                gly_line = find_glyph(glyphs, item_dict['polygons'][idx])
+                glyphs, glyphs_raw, position = find_glyph2(all_glyphs_from_segmentation, item_dict['positions'][idx], scale=self.glyph_scale)
+                if glyphs_raw is not None:
+                    gly_line = find_glyph(glyphs_raw, item_dict['polygons'][idx], scale=self.glyph_scale)
+                    item_dict['positions'][idx] = position
+                else:
+                    gly_line = find_glyph(glyphs, item_dict['polygons'][idx], scale=self.glyph_scale)
+
                 item_dict['glyphs'] += [glyphs]
                 item_dict['gly_line'] += [gly_line]
 
@@ -530,7 +577,7 @@ if __name__ == '__main__':
         r'/tmp/datasets/AnyWord-3M/link_download/laion/laion_test'
     ]
 
-    dataset = T3DataSet(json_paths, glyph_paths, for_show=True, max_lines=20, glyph_scale=2, mask_img_prob=1.0, caption_pos_prob=0.0)
+    dataset = T3DataSet(json_paths, glyph_paths, for_show=True, max_lines=20, glyph_scale=1, mask_img_prob=1.0, caption_pos_prob=0.0)
     train_loader = DataLoader(dataset=dataset, batch_size=1, shuffle=False, num_workers=0)
     pbar = tqdm(total=show_count)
     for i, data in enumerate(train_loader):
@@ -538,24 +585,25 @@ if __name__ == '__main__':
             break
         img = ((data['img'][0].numpy() + 1.0) / 2.0 * 255).astype(np.uint8)
         masked_img = ((data['masked_img'][0].numpy() + 1.0) / 2.0 * 255)[..., ::-1].astype(np.uint8)
-        cv2.imwrite(os.path.join(show_imgs_dir, f'plots_{i}_masked.jpg'), masked_img)
+        img_name = data['img_name'][0][:-4]
+        cv2.imwrite(os.path.join(show_imgs_dir, f'plots_{img_name}_masked.jpg'), masked_img)
         if 'texts' in data and len(data['texts']) > 0:
             texts = [x[0] for x in data['texts']]
             img = show_bbox_on_image(Image.fromarray(img), data['polygons'], texts)
-        cv2.imwrite(os.path.join(show_imgs_dir, f'plots_{i}.jpg'),  np.array(img)[..., ::-1])
-        with open(os.path.join(show_imgs_dir, f'plots_{i}.txt'), 'w') as fin:
+        cv2.imwrite(os.path.join(show_imgs_dir, f'plots_{img_name}.jpg'),  np.array(img)[..., ::-1])
+        with open(os.path.join(show_imgs_dir, f'plots_{img_name}.txt'), 'w') as fin:
             fin.writelines([data['caption'][0]])
         all_glyphs = []
         for k, glyphs in enumerate(data['glyphs']):
-            cv2.imwrite(os.path.join(show_imgs_dir, f'plots_{i}_glyph_{k}.jpg'), glyphs[0].numpy().astype(np.int32)*255)
+            cv2.imwrite(os.path.join(show_imgs_dir, f'plots_{img_name}_glyph_{k}.jpg'), glyphs[0].numpy().astype(np.int32)*255)
             all_glyphs += [glyphs[0].numpy().astype(np.int32)*255]
-        cv2.imwrite(os.path.join(show_imgs_dir, f'plots_{i}_allglyphs.jpg'), np.sum(all_glyphs, axis=0))
+        cv2.imwrite(os.path.join(show_imgs_dir, f'plots_{img_name}_allglyphs.jpg'), np.sum(all_glyphs, axis=0))
         for k, gly_line in enumerate(data['gly_line']):
-            cv2.imwrite(os.path.join(show_imgs_dir, f'plots_{i}_gly_line_{k}.jpg'), gly_line[0].numpy().astype(np.int32)*255)
+            cv2.imwrite(os.path.join(show_imgs_dir, f'plots_{img_name}_gly_line_{k}.jpg'), gly_line[0].numpy().astype(np.int32)*255)
         for k, position in enumerate(data['positions']):
             if position is not None:
-                cv2.imwrite(os.path.join(show_imgs_dir, f'plots_{i}_pos_{k}.jpg'), position[0].numpy().astype(np.int32)*255)
-        cv2.imwrite(os.path.join(show_imgs_dir, f'plots_{i}_hint.jpg'), data['hint'][0].numpy().astype(np.int32)*255)
-        cv2.imwrite(os.path.join(show_imgs_dir, f'plots_{i}_inv_mask.jpg'), np.array(img)[..., ::-1]*(1-data['inv_mask'][0].numpy().astype(np.int32)))
+                cv2.imwrite(os.path.join(show_imgs_dir, f'plots_{img_name}_pos_{k}.jpg'), position[0].numpy().astype(np.int32)*255)
+        cv2.imwrite(os.path.join(show_imgs_dir, f'plots_{img_name}_hint.jpg'), data['hint'][0].numpy().astype(np.int32)*255)
+        cv2.imwrite(os.path.join(show_imgs_dir, f'plots_{img_name}_inv_mask.jpg'), np.array(img)[..., ::-1]*(1-data['inv_mask'][0].numpy().astype(np.int32)))
         pbar.update(1)
     pbar.close()
