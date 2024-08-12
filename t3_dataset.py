@@ -350,11 +350,7 @@ class T3DataSet(Dataset):
         self.wm_thresh = wm_thresh
 
         for jp, gp in zip(json_path, glyph_path):
-            if isinstance(gp, list):    # laion_p1 to laion_p5
-                for gp_split in gp:
-                    data_list += self.load_data(jp, gp_split, percent)
-            else:
-                data_list += self.load_data(jp, gp, percent)
+            data_list += self.load_data(jp, gp, percent)
         self.data_list = data_list
         print(f'All dataset loaded, imgs={len(self.data_list)}')
 
