@@ -364,6 +364,7 @@ class T3DataSet(Dataset):
 
     def load_data(self, json_path, glyph_path, percent):
         tic = time.time()
+        print('json_path', json_path)
         content = load(json_path)
         d = []
         count = 0
