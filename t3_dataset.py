@@ -388,8 +388,16 @@ class T3DataSet(Dataset):
             data_root = content['data_root']
             if self.using_dlc:
                 data_root = data_root.replace('/data/vdb', '/mnt/data', 1)
+
+            # Replace the double occurrence with a single '.jpg'
+            if '.jpg.jpg' in gt['img_name']:
+                gt['img_name'] = gt['img_name'].replace('.jpg.jpg', '.jpg')
+
             img_path = os.path.join(data_root, gt['img_name'])
             glyphs_path = os.path.join(glyph_path, gt['img_name'])
+            print('img_path', img_path)
+            print('glyphs_path', glyphs_path)
+            print('img_name', gt['img_name'])
 
             info = {}
             info['img_path'] = img_path
@@ -483,12 +491,14 @@ class T3DataSet(Dataset):
                     item_dict['glyphs'] += [glyphs]
                     item_dict['gly_line'] += [gly_line]
 
-                    # if aspect_ratio == 0:
-                    #     self.num_invalid_glyph_line += 1
+                    if aspect_ratio == 0:
+                        print('Zero box height')
+                        # self.num_invalid_glyph_line += 1
                     # self.num_total_glyph_lines += 1
             else:
                 # just in case if a sample has no pre-processed glyph image
                 # self.num_missing_glyphs += 1
+                print('Missing glyph images')
                 for idx, text in enumerate(item_dict['texts']):
                     gly_line = draw_glyph(self.font, text)
                     glyphs = draw_glyph2(self.font, text, item_dict['polygons'][idx], scale=self.glyph_scale)
