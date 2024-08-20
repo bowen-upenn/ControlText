@@ -395,9 +395,6 @@ class T3DataSet(Dataset):
 
             img_path = os.path.join(data_root, gt['img_name'])
             glyphs_path = os.path.join(glyph_path, gt['img_name'])
-            print('img_path', img_path)
-            print('glyphs_path', glyphs_path)
-            print('img_name', gt['img_name'])
 
             info = {}
             info['img_path'] = img_path
