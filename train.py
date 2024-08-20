@@ -24,7 +24,7 @@ root_dir = './models'  # path for save checkpoints
 dataset_percent = 1.0  # 1.0 use full datasets, 0.0566 use ~200k images for ablation study
 save_steps = None  # step frequency of saving checkpoints
 save_epochs = 1  # epoch frequency of saving checkpoints
-max_epochs = 15  # default 60
+max_epochs = 10  # default 60
 assert (save_steps is None) != (save_epochs is None)
 
 

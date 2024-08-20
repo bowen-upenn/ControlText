@@ -125,10 +125,12 @@ def draw_glyph2(font, text, polygon, vertAng=10, scale=1, width=512, height=512,
 
 def load_all_glyphs(img_path):
     # load the jpg image
+    # print('img_path', img_path)
     img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
-    img = (img - np.min(img)) / (np.max(img) - np.min(img) + 1e-6)
-    img[img < 0.5] = 0
-    img[img >= 0.5] = 1
+    if img is not None:
+        img = (img - np.min(img)) / (np.max(img) - np.min(img) + 1e-6)
+        img[img < 0.5] = 0
+        img[img >= 0.5] = 1
     return img
 
 
@@ -149,7 +151,10 @@ def find_glyph(glyph_img, polygon, scale=1):
     h = np.linalg.norm(box[1] - box[2])
 
     # Calculate the new rectangle dimensions
-    aspect_ratio = w / h
+    if h != 0:
+        aspect_ratio = w / h
+    else:
+        aspect_ratio = 0
     new_height = int(0.8 * H)
     new_width = int(new_height * aspect_ratio)
 
@@ -180,7 +185,7 @@ def find_glyph(glyph_img, polygon, scale=1):
     # Apply the perspective transformation
     transformed_img = cv2.warpPerspective(glyph_img, M, (W, H))
     transformed_img = np.expand_dims(transformed_img, axis=2).astype(np.float64)
-    return transformed_img
+    return transformed_img, aspect_ratio
 
 
 def find_glyph2(img, position, scale=1, add_perturbation=True, max_offset=16):
@@ -358,6 +363,14 @@ class T3DataSet(Dataset):
         if self.debug:
             self.tmp_items = [i for i in range(100)]
 
+        self.num_missing_glyphs = 0
+        self.num_invalid_glyph_lines = 0
+        self.num_total_glyph_lines = 0
+
+    # def print_num_invalid_glyphs(self):
+    #     print('Num missing glyphs', self.num_missing_glyphs, 'Total', len(self.data_list))
+    #     print('Num invalid glyph lines', self.num_invalid_glyph_lines, 'Total', self.num_total_glyph_lines)
+
     def load_data(self, json_path, glyph_path, percent):
         tic = time.time()
         print('json_path', json_path)
@@ -458,22 +471,29 @@ class T3DataSet(Dataset):
 
             # glyphs
             all_glyphs_from_segmentation = load_all_glyphs(cur_item['glyphs_path'])
-            for idx, text in enumerate(item_dict['texts']):
-                glyphs, glyphs_raw, position = find_glyph2(all_glyphs_from_segmentation, item_dict['positions'][idx], scale=self.glyph_scale)
-                if glyphs_raw is not None:
-                    gly_line = find_glyph(glyphs_raw, item_dict['polygons'][idx], scale=self.glyph_scale)
-                    item_dict['positions'][idx] = position
-                else:
-                    gly_line = find_glyph(glyphs, item_dict['polygons'][idx], scale=self.glyph_scale)
+            if all_glyphs_from_segmentation is not None:
+                for idx, text in enumerate(item_dict['texts']):
+                    glyphs, glyphs_raw, position = find_glyph2(all_glyphs_from_segmentation, item_dict['positions'][idx], scale=self.glyph_scale)
+                    if glyphs_raw is not None:
+                        gly_line, aspect_ratio = find_glyph(glyphs_raw, item_dict['polygons'][idx], scale=self.glyph_scale)
+                        item_dict['positions'][idx] = position
+                    else:
+                        gly_line, aspect_ratio = find_glyph(glyphs, item_dict['polygons'][idx], scale=self.glyph_scale)
 
-                item_dict['glyphs'] += [glyphs]
-                item_dict['gly_line'] += [gly_line]
+                    item_dict['glyphs'] += [glyphs]
+                    item_dict['gly_line'] += [gly_line]
 
-            # for idx, text in enumerate(item_dict['texts']):
-            #     gly_line = draw_glyph(self.font, text)
-            #     glyphs = draw_glyph2(self.font, text, item_dict['polygons'][idx], scale=self.glyph_scale)
-            #     item_dict['glyphs'] += [glyphs]
-            #     item_dict['gly_line'] += [gly_line]
+                    # if aspect_ratio == 0:
+                    #     self.num_invalid_glyph_line += 1
+                    # self.num_total_glyph_lines += 1
+            else:
+                # just in case if a sample has no pre-processed glyph image
+                # self.num_missing_glyphs += 1
+                for idx, text in enumerate(item_dict['texts']):
+                    gly_line = draw_glyph(self.font, text)
+                    glyphs = draw_glyph2(self.font, text, item_dict['polygons'][idx], scale=self.glyph_scale)
+                    item_dict['glyphs'] += [glyphs]
+                    item_dict['gly_line'] += [gly_line]
 
         # inv_mask
         invalid_polygons = cur_item['invalid_polygons'] if 'invalid_polygons' in cur_item else []

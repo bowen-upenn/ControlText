@@ -526,6 +526,7 @@ class ControlLDM(LatentDiffusion):
         log["masked_image"] = self.decode_first_stage(text_info['masked_x'])
         log["control"] = c_cat * 2.0 - 1.0
         log["img"] = text_info['img'].permute(0, 3, 1, 2)  # log source image if needed
+
         # get glyph
         glyph_bs = torch.stack(text_info['glyphs'])
         glyph_bs = torch.sum(glyph_bs, dim=0) * 2.0 - 1.0
