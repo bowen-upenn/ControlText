@@ -14,6 +14,7 @@ from ocr_recog.RecModel import RecModel
 import torch
 import torch.nn.functional as F
 from skimage.transform._geometric import _umeyama as get_sym_mat
+from tqdm import tqdm
 
 
 def min_bounding_rect(img):
@@ -132,7 +133,7 @@ class TextRecognizer(object):
         self.chars = self.get_char_dict(args.rec_char_dict_path)
         self.char2id = {x: i for i, x in enumerate(self.chars)}
         self.is_onnx = not isinstance(self.predictor, torch.nn.Module)
-        self.use_fp16 = args.use_fp16
+        # self.use_fp16 = args.use_fp16
 
     # img: CHW
     def resize_norm_img(self, img, max_wh_ratio):
@@ -172,7 +173,7 @@ class TextRecognizer(object):
         batch_num = self.rec_batch_num
         preds_all = [None] * img_num
         preds_neck_all = [None] * img_num
-        for beg_img_no in range(0, img_num, batch_num):
+        for beg_img_no in tqdm(range(0, img_num, batch_num)):
             end_img_no = min(img_num, beg_img_no + batch_num)
             norm_img_batch = []
 
@@ -189,8 +190,8 @@ class TextRecognizer(object):
                 # max_wh_ratio = max(max_wh_ratio, wh_ratio)  # comment to not use different ratio
             for ino in range(beg_img_no, end_img_no):
                 norm_img = self.resize_norm_img(img_list[indices[ino]], max_wh_ratio)
-                if self.use_fp16:
-                    norm_img = norm_img.half()
+                # if self.use_fp16:
+                #     norm_img = norm_img.half()
                 norm_img = norm_img.unsqueeze(0)
                 norm_img_batch.append(norm_img)
             norm_img_batch = torch.cat(norm_img_batch, dim=0)
@@ -264,12 +265,12 @@ def main():
     rec_model_dir = "./ocr_weights/ppv3_rec.pth"
     predictor = create_predictor(rec_model_dir)
     args = edict()
-    args.rec_image_shape = "3, 48, 320"
+    args.rec_image_shape = "3, 512, 512"
     args.rec_char_dict_path = './ocr_weights/ppocr_keys_v1.txt'
-    args.rec_batch_num = 6
+    args.rec_batch_num = 1
     text_recognizer = TextRecognizer(args, predictor)
-    image_dir = './test_imgs_cn'
-    gt_text = ['韩国小馆']*14
+    image_dir = './Rethinking-Text-Segmentation/log/images/output/laion_test'
+    gt_text = None #['韩国小馆']*14
 
     image_file_list = get_image_file_list(image_dir)
     valid_image_file_list = []
@@ -285,20 +286,24 @@ def main():
     try:
         tic = time.time()
         times = []
-        for i in range(10):
+        for i in range(1): # 10
             preds, _ = text_recognizer.pred_imglist(img_list)  # get text
             preds_all = preds.softmax(dim=2)
             times += [(time.time()-tic)*1000.]
             tic = time.time()
         print(times)
         print(np.mean(times[1:]) / len(preds_all))
-        weight = np.ones(len(gt_text))
-        loss = text_recognizer.get_ctcloss(preds, gt_text, weight)
-        for i in range(len(valid_image_file_list)):
+        if gt_text is not None:
+            weight = np.ones(len(gt_text))
+            loss = text_recognizer.get_ctcloss(preds, gt_text, weight)
+        for i in tqdm(range(len(valid_image_file_list))):
             pred = preds_all[i]
             order, idx = text_recognizer.decode(pred)
             text = text_recognizer.get_text(order)
-            print(f'{valid_image_file_list[i]}: pred/gt="{text}"/"{gt_text[i]}", loss={loss[i]:.2f}')
+            if gt_text is not None:
+                print(f'{valid_image_file_list[i]}: pred/gt="{text}"/"{gt_text[i]}", loss={loss[i]:.2f}')
+            else:
+                print(f'{valid_image_file_list[i]}: pred="{text}"')
     except Exception as E:
         print(traceback.format_exc(), E)
 

@@ -211,7 +211,7 @@ cfg_cocotext.CLASS_NUM = 2
 
 cfg_MTWI2018 = copy.deepcopy(cfg)
 cfg_MTWI2018.DATASET_NAME = 'MTWI2018'
-cfg_MTWI2018.ROOT_DIR = '/pool/bwjiang/controltext/Rethinking-Text-Segmentation/other_anytext_data/MTWI2018/images'
+cfg_MTWI2018.ROOT_DIR = '/pool/bwjiang/datasets/AnyWord-3M/link_download/ocr_data/MTWI2018/images'
 cfg_MTWI2018.IM_MEAN = [0.485, 0.456, 0.406]
 cfg_MTWI2018.IM_STD = [0.229, 0.224, 0.225]
 cfg_MTWI2018.SEGLABEL_IGNORE_LABEL = 999

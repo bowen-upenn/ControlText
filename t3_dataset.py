@@ -4,10 +4,14 @@ import cv2
 import random
 import math
 import time
-import random
 from PIL import Image, ImageDraw, ImageFont
 from torch.utils.data import Dataset, DataLoader
 from dataset_util import load, show_bbox_on_image
+import time
+import argparse
+from shapely.geometry import Polygon
+from paddleocr import PaddleOCR, draw_ocr
+# import easyocr
 
 
 phrase_list = [
@@ -40,22 +44,22 @@ def draw_glyph(font, text):
     img = Image.new(mode='1', size=(W, H), color=0)
     draw = ImageDraw.Draw(img)
     left, top, right, bottom = new_font.getbbox(text)
-    text_width = max(right-left, 5)
+    text_width = max(right - left, 5)
     text_height = max(bottom - top, 5)
-    ratio = min(W*0.9/text_width, H*0.9/text_height)
-    new_font = font.font_variant(size=int(g_size*ratio))
+    ratio = min(W * 0.9 / text_width, H * 0.9 / text_height)
+    new_font = font.font_variant(size=int(g_size * ratio))
 
     text_width, text_height = new_font.getsize(text)
     offset_x, offset_y = new_font.getoffset(text)
     x = (img.width - text_width) // 2
-    y = (img.height - text_height) // 2 - offset_y//2
+    y = (img.height - text_height) // 2 - offset_y // 2
     draw.text((x, y), text, font=new_font, fill='white')
     img = np.expand_dims(np.array(img), axis=2).astype(np.float64)
     return img
 
 
 def draw_glyph2(font, text, polygon, vertAng=10, scale=1, width=512, height=512, add_space=True):
-    enlarge_polygon = polygon*scale
+    enlarge_polygon = polygon * scale
     rect = cv2.minAreaRect(enlarge_polygon)
     box = cv2.boxPoints(rect)
     box = np.int0(box)
@@ -68,14 +72,14 @@ def draw_glyph2(font, text, polygon, vertAng=10, scale=1, width=512, height=512,
         angle += 90
 
     vert = False
-    if (abs(angle) % 90 < vertAng or abs(90-abs(angle) % 90) % 90 < vertAng):
+    if (abs(angle) % 90 < vertAng or abs(90 - abs(angle) % 90) % 90 < vertAng):
         _w = max(box[:, 0]) - min(box[:, 0])
         _h = max(box[:, 1]) - min(box[:, 1])
         if _h >= _w:
             vert = True
             angle = 0
 
-    img = np.zeros((height*scale, width*scale, 3), np.uint8)
+    img = np.zeros((height * scale, width * scale, 3), np.uint8)
     img = Image.fromarray(img)
 
     # infer font size
@@ -91,23 +95,23 @@ def draw_glyph2(font, text, polygon, vertAng=10, scale=1, width=512, height=512,
                 _, _, _tw2, _th2 = draw.textbbox(xy=(0, 0), text=text_space, font=font)
                 if min(w, h) * (_tw2 / _th2) > max(w, h):
                     break
-            text = insert_spaces(text, i-1)
-        font_size = min(w, h)*0.80
+            text = insert_spaces(text, i - 1)
+        font_size = min(w, h) * 0.80
     else:
         shrink = 0.75 if vert else 0.85
-        font_size = min(w, h) / (text_w/max(w, h)) * shrink
+        font_size = min(w, h) / (text_w / max(w, h)) * shrink
     new_font = font.font_variant(size=int(font_size))
 
     left, top, right, bottom = new_font.getbbox(text)
-    text_width = right-left
+    text_width = right - left
     text_height = bottom - top
 
     layer = Image.new('RGBA', img.size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(layer)
     if not vert:
-        draw.text((rect[0][0]-text_width//2, rect[0][1]-text_height//2-top), text, font=new_font, fill=(255, 255, 255, 255))
+        draw.text((rect[0][0] - text_width // 2, rect[0][1] - text_height // 2 - top), text, font=new_font, fill=(255, 255, 255, 255))
     else:
-        x_s = min(box[:, 0]) + _w//2 - text_height//2
+        x_s = min(box[:, 0]) + _w // 2 - text_height // 2
         y_s = min(box[:, 1])
         for c in text:
             draw.text((x_s, y_s), c, font=new_font, fill=(255, 255, 255, 255))
@@ -123,10 +127,10 @@ def draw_glyph2(font, text, polygon, vertAng=10, scale=1, width=512, height=512,
     return img
 
 
-def load_all_glyphs(img_path):
+def load_all_glyphs(glyph_path):
     # load the jpg image
     # print('img_path', img_path)
-    img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+    img = cv2.imread(glyph_path, cv2.IMREAD_GRAYSCALE)
     if img is not None:
         img = (img - np.min(img)) / (np.max(img) - np.min(img) + 1e-6)
         img[img < 0.5] = 0
@@ -135,6 +139,7 @@ def load_all_glyphs(img_path):
 
 
 def find_glyph(glyph_img, polygon, scale=1):
+    # start_time = time.time()
     if scale != 1:
         new_size = (int(glyph_img.shape[1] / scale), int(glyph_img.shape[0] / scale))  # (width, height)
         glyph_img = cv2.resize(glyph_img, new_size, interpolation=cv2.INTER_LINEAR)
@@ -155,6 +160,13 @@ def find_glyph(glyph_img, polygon, scale=1):
         aspect_ratio = w / h
     else:
         aspect_ratio = 0
+
+    if aspect_ratio == 0:
+        # If the box is degenerate (e.g., a triangle or line), use boundingRect as a fallback
+        x, y, w, h = cv2.boundingRect(polygon)
+        box = np.array([[x, y], [x + w, y], [x + w, y + h], [x, y + h]], dtype=np.float32)
+        aspect_ratio = w / (h + 1e-5)
+
     new_height = int(0.8 * H)
     new_width = int(new_height * aspect_ratio)
 
@@ -177,6 +189,11 @@ def find_glyph(glyph_img, polygon, scale=1):
         [center_x - new_width // 2, center_y + new_height // 2]
     ], dtype=np.float32)
 
+    # end_time = time.time()  # Record the end time
+    # execution_time = end_time - start_time  # Calculate the time difference
+    # print(f"Execution time 1: {execution_time} seconds")
+    # start_time = time.time()
+
     # Calculate the perspective transform matrix
     old_rect_ordered = box
     new_rect_ordered = new_rect.astype(np.float32)
@@ -185,10 +202,15 @@ def find_glyph(glyph_img, polygon, scale=1):
     # Apply the perspective transformation
     transformed_img = cv2.warpPerspective(glyph_img, M, (W, H))
     transformed_img = np.expand_dims(transformed_img, axis=2).astype(np.float64)
+
+    # end_time = time.time()  # Record the end time
+    # execution_time = end_time - start_time  # Calculate the time difference
+    # print(f"Execution time 2: {execution_time} seconds")
     return transformed_img, aspect_ratio
 
 
 def find_glyph2(img, position, scale=1, add_perturbation=True, max_offset=16):
+    # start_time = time.time()
     # Convert the image to a numpy array
     img = np.array(img)
     # print(np.min(img), np.max(img))
@@ -202,8 +224,8 @@ def find_glyph2(img, position, scale=1, add_perturbation=True, max_offset=16):
     if scale != 1:
         # Scale the image using interpolation
         new_size = (int(img.shape[1] * scale), int(img.shape[0] * scale))  # (width, height)
-        img = cv2.resize(img, new_size, interpolation=cv2.INTER_LINEAR)  # Using bilinear interpolation
-        position = cv2.resize(position, new_size, interpolation=cv2.INTER_LINEAR)
+        img = cv2.resize(img, new_size, interpolation=cv2.INTER_NEAREST)  # Using bilinear interpolation
+        position = cv2.resize(position, new_size, interpolation=cv2.INTER_NEAREST)
 
     # Apply the mask to the image, making pixels outside the polygon black
     img = img * position
@@ -211,23 +233,28 @@ def find_glyph2(img, position, scale=1, add_perturbation=True, max_offset=16):
     # Undo the scaling of the position mask for downstream processing
     position = raw_position
 
+    # end_time = time.time()  # Record the end time
+    # execution_time = end_time - start_time  # Calculate the time difference
+    # print(f"Execution time 3: {execution_time} seconds")
+    # start_time = time.time()
+
     if add_perturbation:
         # Add slight random perspective transformations to the image and the position mask
         pts1 = np.float32([[0, 0], [cols * scale, 0], [0, rows * scale], [cols * scale, rows * scale]])
         pts2 = pts1 + np.float32([
             [random.uniform(-max_offset * scale, 0), random.uniform(-max_offset * scale, 0)],  # Top-left
-            [random.uniform(0, max_offset * scale), random.uniform(-max_offset * scale, 0)],   # Top-right
-            [random.uniform(-max_offset * scale, 0), random.uniform(0, max_offset * scale)],   # Bottom-left
-            [random.uniform(0, max_offset * scale), random.uniform(0, max_offset * scale)]     # Bottom-right
+            [random.uniform(0, max_offset * scale), random.uniform(-max_offset * scale, 0)],  # Top-right
+            [random.uniform(-max_offset * scale, 0), random.uniform(0, max_offset * scale)],  # Bottom-left
+            [random.uniform(0, max_offset * scale), random.uniform(0, max_offset * scale)]  # Bottom-right
         ])
         M_perspective_img = cv2.getPerspectiveTransform(pts1, pts2)
 
         pts3 = np.float32([[0, 0], [cols, 0], [0, rows], [cols, rows]])
         pts4 = pts3 + np.float32([
             [random.uniform(-max_offset, 0), random.uniform(-max_offset, 0)],  # Top-left
-            [random.uniform(0, max_offset), random.uniform(-max_offset, 0)],   # Top-right
-            [random.uniform(-max_offset, 0), random.uniform(0, max_offset)],   # Bottom-left
-            [random.uniform(0, max_offset), random.uniform(0, max_offset)]     # Bottom-right
+            [random.uniform(0, max_offset), random.uniform(-max_offset, 0)],  # Top-right
+            [random.uniform(-max_offset, 0), random.uniform(0, max_offset)],  # Bottom-left
+            [random.uniform(0, max_offset), random.uniform(0, max_offset)]  # Bottom-right
         ])
         M_perspective_pos = cv2.getPerspectiveTransform(pts3, pts4)
 
@@ -237,6 +264,10 @@ def find_glyph2(img, position, scale=1, add_perturbation=True, max_offset=16):
 
         img_perturbed = np.expand_dims(img_perturbed, axis=2).astype(np.float64)
         position_perturbed = np.expand_dims(position_perturbed, axis=-1)
+
+        # end_time = time.time()  # Record the end time
+        # execution_time = end_time - start_time  # Calculate the time difference
+        # print(f"Execution time 4: {execution_time} seconds")
 
         return img_perturbed, img, position_perturbed
     else:
@@ -314,6 +345,31 @@ def order_points(pts):
     return rect
 
 
+def calculate_iou(polygon1, polygon2):
+    """Calculate Intersection over Union (IoU) between two polygons."""
+    poly1 = Polygon(polygon1)
+    poly2 = Polygon(polygon2)
+    if not poly1.is_valid or not poly2.is_valid:
+        return 0
+    intersection = poly1.intersection(poly2).area
+    union = poly1.union(poly2).area
+    return intersection / union
+
+
+def find_nearest_polygon(detected_box, polygons):
+    """Find the polygon from the list of polygons that has the highest IoU with the detected box."""
+    best_iou = 0
+    best_polygon = None
+    best_idx = -1
+    for idx, polygon in enumerate(polygons):
+        iou = calculate_iou(detected_box, polygon)
+        if iou > best_iou:
+            best_iou = iou
+            best_polygon = polygon
+            best_idx = idx
+    return best_polygon, best_idx
+
+
 class T3DataSet(Dataset):
     def __init__(
             self,
@@ -332,7 +388,7 @@ class T3DataSet(Dataset):
             percent=1.0,
             debug=False,
             wm_thresh=1.0,
-            ):
+    ):
         assert isinstance(json_path, (str, list))
         if isinstance(json_path, str):
             json_path = [json_path]
@@ -367,9 +423,10 @@ class T3DataSet(Dataset):
         self.num_invalid_glyph_lines = 0
         self.num_total_glyph_lines = 0
 
-    # def print_num_invalid_glyphs(self):
-    #     print('Num missing glyphs', self.num_missing_glyphs, 'Total', len(self.data_list))
-    #     print('Num invalid glyph lines', self.num_invalid_glyph_lines, 'Total', self.num_total_glyph_lines)
+        self.ocr_ch = PaddleOCR(use_angle_cls=True, lang="ch")  # need to run only once to download and load model into memory
+        self.ocr_en = PaddleOCR(use_angle_cls=True, lang="en")
+        # self.ocr = easyocr.Reader(['ch_sim', 'en'])
+
 
     def load_data(self, json_path, glyph_path, percent):
         tic = time.time()
@@ -388,18 +445,20 @@ class T3DataSet(Dataset):
             data_root = content['data_root']
             if self.using_dlc:
                 data_root = data_root.replace('/data/vdb', '/mnt/data', 1)
-
-            # Replace the double occurrence with a single '.jpg'
-            if '.jpg.jpg' in gt['img_name']:
-                gt['img_name'] = gt['img_name'].replace('.jpg.jpg', '.jpg')
+            data_root = data_root.replace('/pool/bwjiang/', '/tmp/')
 
             img_path = os.path.join(data_root, gt['img_name'])
-            glyphs_path = os.path.join(glyph_path, gt['img_name'])
 
             info = {}
             info['img_path'] = img_path
             info['img_name'] = gt['img_name']
+
+            # # Replace the double occurrence with a single '.jpg'
+            # if '.jpg.jpg' in gt['img_name']:
+            #     gt['img_name'] = gt['img_name'].replace('.jpg.jpg', '.jpg')
+            glyphs_path = os.path.join(glyph_path, gt['img_name'])
             info['glyphs_path'] = glyphs_path
+
             info['caption'] = gt['caption'] if 'caption' in gt else ''
             if self.place_holder in info['caption']:
                 count += 1
@@ -427,10 +486,11 @@ class T3DataSet(Dataset):
                 info['language'] = languages
                 info['pos'] = pos
             d.append(info)
-        print(f'{json_path} loaded, imgs={len(d)}, wm_skip={wm_skip}, time={(time.time()-tic):.2f}s')
+        print(f'{json_path} loaded, imgs={len(d)}, wm_skip={wm_skip}, time={(time.time() - tic):.2f}s')
         if count > 0:
             print(f"Found {count} image's caption contain placeholder: {self.place_holder}, change to ' '...")
         return d
+
 
     def __getitem__(self, item):
         item_dict = {}
@@ -476,6 +536,8 @@ class T3DataSet(Dataset):
 
             # glyphs
             all_glyphs_from_segmentation = load_all_glyphs(cur_item['glyphs_path'])
+            item_dict['glyphs_path'] = cur_item['glyphs_path']
+
             if all_glyphs_from_segmentation is not None:
                 for idx, text in enumerate(item_dict['texts']):
                     glyphs, glyphs_raw, position = find_glyph2(all_glyphs_from_segmentation, item_dict['positions'][idx], scale=self.glyph_scale)
@@ -501,6 +563,12 @@ class T3DataSet(Dataset):
                     glyphs = draw_glyph2(self.font, text, item_dict['polygons'][idx], scale=self.glyph_scale)
                     item_dict['glyphs'] += [glyphs]
                     item_dict['gly_line'] += [gly_line]
+            # # glyphs
+            # for idx, text in enumerate(item_dict['texts']):
+            #     gly_line = draw_glyph(self.font, text)
+            #     glyphs = draw_glyph2(self.font, text, item_dict['polygons'][idx], scale=self.glyph_scale)
+            #     item_dict['glyphs'] += [glyphs]
+            #     item_dict['gly_line'] += [gly_line]
 
         # inv_mask
         invalid_polygons = cur_item['invalid_polygons'] if 'invalid_polygons' in cur_item else []
@@ -517,7 +585,7 @@ class T3DataSet(Dataset):
             for i in range(box_num):
                 pos_list += [self.draw_pos(boxes[i], self.mask_pos_prob)]
             mask = self.get_hint(pos_list)
-            masked_img = target*(1-mask)
+            masked_img = target * (1 - mask)
         else:
             masked_img = np.zeros_like(target)
         item_dict['masked_img'] = masked_img
@@ -532,7 +600,7 @@ class T3DataSet(Dataset):
         item_dict['n_lines'] = n_lines
         n_pad = self.max_lines - n_lines
         if n_pad > 0:
-            item_dict['glyphs'] += [np.zeros((512*self.glyph_scale, 512*self.glyph_scale, 1))] * n_pad
+            item_dict['glyphs'] += [np.zeros((512 * self.glyph_scale, 512 * self.glyph_scale, 1))] * n_pad
             item_dict['gly_line'] += [np.zeros((80, 512, 1))] * n_pad
             item_dict['positions'] += [np.zeros((512, 512, 1))] * n_pad
             item_dict['texts'] += [' '] * n_pad
@@ -540,8 +608,61 @@ class T3DataSet(Dataset):
 
         return item_dict
 
+
     def __len__(self):
         return len(self.data_list)
+
+
+    def load_all_glyphs_and_ocr(self, glyph_path, texts, languages, polygons):
+        # load the jpg image
+        # print('glyph_path', glyph_path)
+        glyph_img = cv2.imread(glyph_path, cv2.IMREAD_GRAYSCALE)
+        if glyph_img is not None:
+            glyph_img = (glyph_img - np.min(glyph_img)) / (np.max(glyph_img) - np.min(glyph_img) + 1e-6)
+            glyph_img[glyph_img < 0.5] = 0
+            glyph_img[glyph_img >= 0.5] = 1
+
+        print('glyph_path', glyph_path)
+        # ocr_result = self.ocr.readtext(glyph_path)
+        if languages[0] == 'Latin':
+            ocr_result = self.ocr_en.ocr(glyph_path, cls=True)
+        else:  # chinese
+            ocr_result = self.ocr_ch.ocr(glyph_path, cls=True)
+
+        used_polygons = set()  # To track which polygons have been used
+        # For each detected OCR result
+        for detected in ocr_result[0]:
+            detected_box = detected[0]  # Bounding box of the detected text
+            detected_text = detected[1]  # Detected text itself
+            confidence = detected[2]  # Confidence score of the detected text
+            print(f"Detected text: {detected_text}, confidence: {confidence}, box: {detected_box}")
+
+            # Find the nearest polygon from the provided polygons
+            nearest_polygon, nearest_idx = find_nearest_polygon(detected_box, polygons)
+
+            if nearest_polygon is not None and nearest_idx not in used_polygons:
+                # Check if the detected text matches the provided text for this polygon
+                provided_text = texts[nearest_idx]
+                if detected_text != provided_text and confidence > 0.5:
+                    # If the text does not match, remove the text by filling the polygon with black
+                    polygon_points = np.array(nearest_polygon, np.int32)
+                    polygon_points = polygon_points.reshape((-1, 1, 2))  # Reshape for filling function
+                    cv2.fillPoly(glyph_img, [polygon_points], (0, 0, 0))  # Fill with black
+
+                # Mark this polygon as used
+                used_polygons.add(nearest_idx)
+
+        # Handle unmatched polygons (if there are extra polygons without OCR-detected texts)
+        for idx, polygon in enumerate(polygons):
+            if idx not in used_polygons:
+                # If the polygon has not been used, we can either ignore or fill it with black
+                polygon_points = np.array(polygon, np.int32)
+                polygon_points = polygon_points.reshape((-1, 1, 2))
+                cv2.fillPoly(glyph_img, [polygon_points], (0, 0, 0))  # Optionally fill unmatched polygons
+
+        save_path = glyph_path.replace('output', 'ocr_verified')
+        cv2.imwrite(save_path, glyph_img)
+
 
     def draw_inv_mask(self, polygons):
         img = np.zeros((512, 512))
@@ -549,7 +670,8 @@ class T3DataSet(Dataset):
             pts = p.reshape((-1, 1, 2))
             cv2.fillPoly(img, [pts], color=255)
         img = img[..., None]
-        return img/255.
+        return img / 255.
+
 
     def draw_pos(self, ploygon, prob=1.0):
         img = np.zeros((512, 512))
@@ -575,7 +697,8 @@ class T3DataSet(Dataset):
             elif random_value < 1.0 and not small:
                 img = cv2.erode(img.astype(np.uint8), kernel, iterations=2)
         img = img[..., None]
-        return img/255.
+        return img / 255.
+
 
     def get_hint(self, positions):
         if len(positions) == 0:
@@ -591,18 +714,63 @@ if __name__ == '__main__':
     from matplotlib import pyplot as plt
     import shutil
 
+    import paddle
+    paddle.set_device('cpu')
+    print(paddle.is_compiled_with_cuda())
+    print(paddle.device.get_device())
+
+    parser = argparse.ArgumentParser(description='Command line arguments')
+    parser.add_argument('--step', type=str, default="show_results", help='show_results or process_segmentations')
+    cmd_args = parser.parse_args()
+    step = cmd_args.step
+
     show_imgs_dir = 'show_results'
-    show_count = 50
+    show_count = 5
     if os.path.exists(show_imgs_dir):
         shutil.rmtree(show_imgs_dir)
     os.makedirs(show_imgs_dir)
     plt.rcParams['axes.unicode_minus'] = False
-    json_paths = [
-        r'/tmp/datasets/AnyWord-3M/link_download/laion/test_data_v1.1.json',
-    ]
-    glyph_paths = [
-        r'./Rethinking-Text-Segmentation/log/images/output/laion_test',
-    ]
+
+    if step == 'show_results':
+        json_paths = [
+            r'/tmp/datasets/AnyWord-3M/link_download/laion/test_data_v1.1.json',
+        ]
+        glyph_paths = [
+            r'./Rethinking-Text-Segmentation/log/images/output/laion_test',
+        ]
+    else:
+        json_paths = [
+            r'/tmp/datasets/AnyWord-3M/link_download/laion/test_data_v1.1.json',
+            # r'/tmp/datasets/AnyWord-3M/link_download/laion/data_v1.1.json',
+            # r'/tmp/datasets/AnyWord-3M/link_download/wukong_1of5/data_v1.1.json',
+            # r'/tmp/datasets/AnyWord-3M/link_download/wukong_2of5/data_v1.1.json',
+            # r'/tmp/datasets/AnyWord-3M/link_download/wukong_3of5/data_v1.1.json',
+            # r'/tmp/datasets/AnyWord-3M/link_download/wukong_4of5/data_v1.1.json',
+            # r'/tmp/datasets/AnyWord-3M/link_download/wukong_5of5/data_v1.1.json',
+            # r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/Art/data.json',
+            # r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/COCO_Text/data.json',
+            # r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/icdar2017rctw/data.json',
+            # r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/LSVT/data.json',
+            # r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/mlt2019/data.json',
+            # r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/MTWI2018/data.json',
+            # r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/ReCTS/data.json'
+        ]
+        glyph_paths = [
+            r'./Rethinking-Text-Segmentation/log/images/output/laion_test',
+            # r'./Rethinking-Text-Segmentation/log/images/output/laion',
+            # r'./Rethinking-Text-Segmentation/log/images/output/wukong_1of5',
+            # r'./Rethinking-Text-Segmentation/log/images/output/wukong_2of5',
+            # r'./Rethinking-Text-Segmentation/log/images/output/wukong_3of5',
+            # r'./Rethinking-Text-Segmentation/log/images/output/wukong_4of5',
+            # r'./Rethinking-Text-Segmentation/log/images/output/wukong_5of5',
+            # r'./Rethinking-Text-Segmentation/log/images/output/Art',
+            # r'./Rethinking-Text-Segmentation/log/images/output/COCO_Text',
+            # r'./Rethinking-Text-Segmentation/log/images/output/icdar2017rctw',
+            # r'./Rethinking-Text-Segmentation/log/images/output/LSVT',
+            # r'./Rethinking-Text-Segmentation/log/images/output/mlt2019',
+            # r'./Rethinking-Text-Segmentation/log/images/output/MTWI2018',
+            # r'./Rethinking-Text-Segmentation/log/images/output/ReCTS'
+        ]
 
     dataset = T3DataSet(json_paths, glyph_paths, for_show=True, max_lines=20, glyph_scale=2, mask_img_prob=1.0, caption_pos_prob=0.0)
     train_loader = DataLoader(dataset=dataset, batch_size=1, shuffle=False, num_workers=0)
@@ -610,27 +778,33 @@ if __name__ == '__main__':
     for i, data in enumerate(train_loader):
         if i == show_count:
             break
-        img = ((data['img'][0].numpy() + 1.0) / 2.0 * 255).astype(np.uint8)
-        masked_img = ((data['masked_img'][0].numpy() + 1.0) / 2.0 * 255)[..., ::-1].astype(np.uint8)
-        img_name = data['img_name'][0][:-4]
-        cv2.imwrite(os.path.join(show_imgs_dir, f'plots_{img_name}_masked.jpg'), masked_img)
-        if 'texts' in data and len(data['texts']) > 0:
-            texts = [x[0] for x in data['texts']]
-            img = show_bbox_on_image(Image.fromarray(img), data['polygons'], texts)
-        cv2.imwrite(os.path.join(show_imgs_dir, f'plots_{img_name}.jpg'),  np.array(img)[..., ::-1])
-        with open(os.path.join(show_imgs_dir, f'plots_{img_name}.txt'), 'w') as fin:
-            fin.writelines([data['caption'][0]])
-        all_glyphs = []
-        for k, glyphs in enumerate(data['glyphs']):
-            cv2.imwrite(os.path.join(show_imgs_dir, f'plots_{img_name}_glyph_{k}.jpg'), glyphs[0].numpy().astype(np.int32)*255)
-            all_glyphs += [glyphs[0].numpy().astype(np.int32)*255]
-        cv2.imwrite(os.path.join(show_imgs_dir, f'plots_{img_name}_allglyphs.jpg'), np.sum(all_glyphs, axis=0))
-        for k, gly_line in enumerate(data['gly_line']):
-            cv2.imwrite(os.path.join(show_imgs_dir, f'plots_{img_name}_gly_line_{k}.jpg'), gly_line[0].numpy().astype(np.int32)*255)
-        for k, position in enumerate(data['positions']):
-            if position is not None:
-                cv2.imwrite(os.path.join(show_imgs_dir, f'plots_{img_name}_pos_{k}.jpg'), position[0].numpy().astype(np.int32)*255)
-        cv2.imwrite(os.path.join(show_imgs_dir, f'plots_{img_name}_hint.jpg'), data['hint'][0].numpy().astype(np.int32)*255)
-        cv2.imwrite(os.path.join(show_imgs_dir, f'plots_{img_name}_inv_mask.jpg'), np.array(img)[..., ::-1]*(1-data['inv_mask'][0].numpy().astype(np.int32)))
+
+        if step == 'show_results':
+            img = ((data['img'][0].numpy() + 1.0) / 2.0 * 255).astype(np.uint8)
+            masked_img = ((data['masked_img'][0].numpy() + 1.0) / 2.0 * 255)[..., ::-1].astype(np.uint8)
+            img_name = data['img_name'][0][:-4]
+            cv2.imwrite(os.path.join(show_imgs_dir, f'plots_{img_name}_masked.jpg'), masked_img)
+            if 'texts' in data and len(data['texts']) > 0:
+                texts = [x[0] for x in data['texts']]
+                img = show_bbox_on_image(Image.fromarray(img), data['polygons'], texts)
+            cv2.imwrite(os.path.join(show_imgs_dir, f'plots_{img_name}.jpg'), np.array(img)[..., ::-1])
+            with open(os.path.join(show_imgs_dir, f'plots_{img_name}.txt'), 'w') as fin:
+                fin.writelines([data['caption'][0]])
+            all_glyphs = []
+            for k, glyphs in enumerate(data['glyphs']):
+                cv2.imwrite(os.path.join(show_imgs_dir, f'plots_{img_name}_glyph_{k}.jpg'), glyphs[0].numpy().astype(np.int32) * 255)
+                all_glyphs += [glyphs[0].numpy().astype(np.int32) * 255]
+            cv2.imwrite(os.path.join(show_imgs_dir, f'plots_{img_name}_allglyphs.jpg'), np.sum(all_glyphs, axis=0))
+            for k, gly_line in enumerate(data['gly_line']):
+                cv2.imwrite(os.path.join(show_imgs_dir, f'plots_{img_name}_gly_line_{k}.jpg'), gly_line[0].numpy().astype(np.int32) * 255)
+            for k, position in enumerate(data['positions']):
+                if position is not None:
+                    cv2.imwrite(os.path.join(show_imgs_dir, f'plots_{img_name}_pos_{k}.jpg'), position[0].numpy().astype(np.int32) * 255)
+            cv2.imwrite(os.path.join(show_imgs_dir, f'plots_{img_name}_hint.jpg'), data['hint'][0].numpy().astype(np.int32) * 255)
+            cv2.imwrite(os.path.join(show_imgs_dir, f'plots_{img_name}_inv_mask.jpg'), np.array(img)[..., ::-1] * (1 - data['inv_mask'][0].numpy().astype(np.int32)))
+
+        else:
+            dataset.load_all_glyphs_and_ocr(data['glyphs_path'][0], data['texts'][0], data['language'][0], data['polygons'][0])
+
         pbar.update(1)
     pbar.close()

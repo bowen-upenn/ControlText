@@ -513,7 +513,7 @@ class es(object):
             predicted_image = Image.fromarray(prfn, 'L')
             # predicted_image.save('log/images/output_' + str(idx) + '.jpg')
             output_dir = osp.join('log/images/output/', cfg.DATA.DATASET_NAME)
-            filename = item['fn'][0] + '.jpg'
+            filename = item['fn'][0]
             predicted_image_path = osp.join(output_dir, filename)
             print(predicted_image_path)
             os.makedirs(output_dir, exist_ok=True)  # Ensure the directory exists

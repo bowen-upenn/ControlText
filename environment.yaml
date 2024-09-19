@@ -1,4 +1,4 @@
-name: anytext
+name: ppocr
 channels:
   - pytorch
   - defaults
