@@ -11,9 +11,10 @@ import time
 import argparse
 from shapely.geometry import Polygon
 import torch
+import torch.nn.functional as F
 import paddle
 from paddleocr import PaddleOCR, draw_ocr
-# import easyocr
+from difflib import SequenceMatcher
 
 
 phrase_list = [
@@ -223,11 +224,11 @@ def find_glyph2(img, position, scale=1, add_perturbation=True, max_offset=16):
     position = position.squeeze(-1)
     raw_position = position.copy()
 
-    if scale != 1:
-        # Scale the image using interpolation
-        new_size = (int(img.shape[1] * scale), int(img.shape[0] * scale))  # (width, height)
-        img = cv2.resize(img, new_size, interpolation=cv2.INTER_NEAREST)  # Using bilinear interpolation
-        position = cv2.resize(position, new_size, interpolation=cv2.INTER_NEAREST)
+    # if scale != 1:
+    #     # Scale the image using interpolation
+    #     new_size = (int(img.shape[1] * scale), int(img.shape[0] * scale))  # (width, height)
+    #     img = cv2.resize(img, new_size, interpolation=cv2.INTER_NEAREST)  # Using bilinear interpolation
+    #     position = cv2.resize(position, new_size, interpolation=cv2.INTER_NEAREST)
 
     # Apply the mask to the image, making pixels outside the polygon black
     img = img * position
@@ -538,6 +539,7 @@ class T3DataSet(Dataset):
 
             # glyphs
             all_glyphs_from_segmentation = load_all_glyphs(cur_item['glyphs_path'])
+            item_dict['all_glyphs_from_segmentation'] = all_glyphs_from_segmentation
             item_dict['glyphs_path'] = cur_item['glyphs_path']
 
             if all_glyphs_from_segmentation is not None:
@@ -615,63 +617,10 @@ class T3DataSet(Dataset):
         return len(self.data_list)
 
 
-    def load_all_glyphs_and_ocr(self, glyph_path, texts, languages, polygons):
-        # load the jpg image
-        # print('glyph_path', glyph_path)
-        glyph_img = cv2.imread(glyph_path, cv2.IMREAD_GRAYSCALE)
-        if glyph_img is not None:
-            glyph_img = (glyph_img - np.min(glyph_img)) / (np.max(glyph_img) - np.min(glyph_img) + 1e-6)
-            glyph_img[glyph_img < 0.5] = 0
-            glyph_img[glyph_img >= 0.5] = 1
-
-        print('glyph_path', glyph_path)
-        # ocr_result = self.ocr.readtext(glyph_path)
-        if languages[0] == 'Latin':
-            ocr_result = self.ocr_en.ocr(glyph_path, cls=True)
-        else:  # chinese
-            ocr_result = self.ocr_ch.ocr(glyph_path, cls=True)
-
-        used_polygons = set()  # To track which polygons have been used
-        # For each detected OCR result
-        for detected in ocr_result[0]:
-            print('detected', detected)
-            detected_box = detected[0]  # Bounding box of the detected text
-            detected_text = detected[1][0]  # Detected text itself
-            confidence = detected[1][1]  # Confidence score of the detected text
-
-            # Find the nearest polygon from the provided polygons
-            nearest_polygon, nearest_idx = find_nearest_polygon(detected_box, polygons)
-            print('nearest_idx', nearest_idx, 'nearest_polygon', nearest_polygon)
-
-            if nearest_polygon is not None and nearest_idx not in used_polygons:
-                # Check if the detected text matches the provided text for this polygon
-                provided_text = texts[nearest_idx]
-                print(f"Detected text: {detected_text}, confidence: {confidence}, box: {detected_box}, provided text: {provided_text}")
-                if detected_text != provided_text and confidence > 0.5:
-                    # If the text does not match, remove the text by filling the polygon with black
-                    polygon_points = np.array(nearest_polygon, np.int32)
-                    polygon_points = polygon_points.reshape((-1, 1, 2))  # Reshape for filling function
-                    cv2.fillPoly(glyph_img, [polygon_points], (0, 0, 0))  # Fill with black
-
-                # Mark this polygon as used
-                used_polygons.add(nearest_idx)
-
-        # Handle unmatched polygons (if there are extra polygons without OCR-detected texts)
-        for idx, polygon in enumerate(polygons):
-            if idx not in used_polygons:
-                # If the polygon has not been used, we can either ignore or fill it with black
-                polygon_points = np.array(polygon, np.int32)
-                polygon_points = polygon_points.reshape((-1, 1, 2))
-                cv2.fillPoly(glyph_img, [polygon_points], (0, 0, 0))  # Optionally fill unmatched polygons
-
-        save_path = glyph_path.replace('output', 'ocr_verified')
-        cv2.imwrite(save_path, glyph_img)
-
-
-    def load_glyline_and_ocr(self, gly_line, text, language, position, glyph, verbose=False):
+    def load_glyline_and_ocr(self, gly_line, text, language, glyph_path,verbose=True):
         # load the jpg image
         if verbose:
-            print('target text', text, 'gly_line', gly_line.shape, 'glyph', glyph.shape, 'position', position.shape)
+            print('target text', text, 'gly_line', gly_line.shape, 'glyph_path', glyph_path)
 
         # Permute to get it to (C, H, W) format and repeat to make it RGB
         gly_line = (gly_line - torch.min(gly_line)) / (torch.max(gly_line) - torch.min(gly_line) + 1e-6) * 255
@@ -686,14 +635,41 @@ class T3DataSet(Dataset):
             ocr_result = self.ocr_en.ocr(np.asarray(gly_line), cls=True)
         else:  # chinese
             ocr_result = self.ocr_ch.ocr(np.asarray(gly_line), cls=True)
-        ocr_result = ocr_result[0][0]
+        print('ocr_result', ocr_result)
 
-        # For each detected OCR result
-        detected_box = ocr_result[0]  # Bounding box of the detected text
-        detected_text = ocr_result[1][0]  # Detected text itself
-        confidence = ocr_result[1][1]  # Confidence score of the detected text
-        if verbose:
-            print('detected text', text, 'detected_text', detected_text, 'confidence', confidence, 'detected_box', detected_box, '\n')
+        if ocr_result is not None and ocr_result[0] is not None:
+            ocr_result = ocr_result[0][0]
+            detected_box = ocr_result[0]  # Bounding box of the detected text
+            detected_text = ocr_result[1][0]  # Detected text itself
+            confidence = ocr_result[1][1]  # Confidence score of the detected text
+            if verbose:
+                print('detected_text', detected_text, 'confidence', confidence, 'detected_box', detected_box)
+
+            # Mark high quality detections
+            detected_text = detected_text.lower().replace(' ', '')
+            text = text.lower().replace(' ', '')
+            if detected_text == text:   # Shortcut
+                if verbose:
+                    print("Matched texts.\n")
+                return True
+
+            if confidence > 0.8:
+                # Check if the edit distance between the texts is less than 2
+                edit_distance = SequenceMatcher(None, detected_text, text).ratio()
+                if edit_distance > 0.8:  # If texts are within 1 edit distance
+                    if verbose:
+                        print(f"High quality detection: Close match (edit distance ratio: {edit_distance}).\n")
+                    return True
+                else:
+                    if verbose:
+                        print(f"Low quality detection: Edit distance ratio: {edit_distance}.\n")
+            else:
+                if verbose:
+                    print('Low quality detection\n')
+        else:
+            if verbose:
+                print('No text detected\n')
+        return False # Return None if no high quality detection is found
 
 
     def draw_inv_mask(self, polygons):
@@ -747,8 +723,8 @@ if __name__ == '__main__':
     import shutil
 
     paddle.set_device('cpu')
-    print(paddle.is_compiled_with_cuda())
-    print(paddle.device.get_device())
+    print('paddle.is_compiled_with_cuda()', paddle.is_compiled_with_cuda())
+    print('paddle.device.get_device()', paddle.device.get_device())
 
     parser = argparse.ArgumentParser(description='Command line arguments')
     parser.add_argument('--step', type=str, default="show_results", help='show_results or process_segmentations')
@@ -756,7 +732,8 @@ if __name__ == '__main__':
     step = cmd_args.step
 
     show_imgs_dir = 'show_results'
-    show_count = 5
+    show_count = 10
+    glyph_scale = 2
     if os.path.exists(show_imgs_dir):
         shutil.rmtree(show_imgs_dir)
     os.makedirs(show_imgs_dir)
@@ -803,7 +780,7 @@ if __name__ == '__main__':
             # r'./Rethinking-Text-Segmentation/log/images/output/ReCTS'
         ]
 
-    dataset = T3DataSet(json_paths, glyph_paths, for_show=True, max_lines=20, glyph_scale=2, mask_img_prob=1.0, caption_pos_prob=0.0)
+    dataset = T3DataSet(json_paths, glyph_paths, for_show=True, max_lines=20, glyph_scale=glyph_scale, mask_img_prob=1.0, caption_pos_prob=0.0)
     train_loader = DataLoader(dataset=dataset, batch_size=1, shuffle=False, num_workers=0)
     pbar = tqdm(total=show_count)
     for i, data in enumerate(train_loader):
@@ -835,8 +812,29 @@ if __name__ == '__main__':
             cv2.imwrite(os.path.join(show_imgs_dir, f'plots_{img_name}_inv_mask.jpg'), np.array(img)[..., ::-1] * (1 - data['inv_mask'][0].numpy().astype(np.int32)))
 
         else:
+            has_good_quality = False
+            filtered_glyphs = data['all_glyphs_from_segmentation'][0].unsqueeze(-1)
+
             for k in range(len(data['gly_line'])):
-                dataset.load_glyline_and_ocr(data['gly_line'][k][0], data['texts'][k], data['language'][k], data['positions'][k][0], data['glyphs'][k][0])
+                good_quality = dataset.load_glyline_and_ocr(data['gly_line'][k][0], data['texts'][k][0], data['language'][k], data['glyphs_path'])
+                if good_quality:
+                    has_good_quality = True
+                else:
+                    poor_positions = data['positions'][k][0]
+                    poor_positions = 1 - poor_positions
+                    
+                    # remove contents in the poor positions
+                    filtered_glyphs[poor_positions < 0.5] = 0
+
+            if has_good_quality:
+                # save filtered glyphs
+                if glyph_scale != 1:
+                    new_size = (int(filtered_glyphs.shape[1] * glyph_scale), int(filtered_glyphs.shape[0] * glyph_scale))  # (width, height)
+                    filtered_glyphs = cv2.resize(filtered_glyphs.numpy(), new_size, interpolation=cv2.INTER_AREA) * 255
+
+                saved_file_name = data['glyphs_path'][0].replace('/output/', '/ocr_verified/')
+                # print('saved_file_name', saved_file_name)
+                cv2.imwrite(saved_file_name, filtered_glyphs)
 
         pbar.update(1)
     pbar.close()
