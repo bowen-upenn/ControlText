@@ -425,8 +425,8 @@ class T3DataSet(Dataset):
         self.num_invalid_glyph_lines = 0
         self.num_total_glyph_lines = 0
 
-        self.ocr_ch = PaddleOCR(use_angle_cls=True, lang="ch")  # need to run only once to download and load model into memory
-        self.ocr_en = PaddleOCR(use_angle_cls=True, lang="en")
+        self.ocr_ch = PaddleOCR(use_angle_cls=True, show_log=False, lang="ch")  # need to run only once to download and load model into memory
+        self.ocr_en = PaddleOCR(use_angle_cls=True, show_log=False, lang="en")
         # self.ocr = easyocr.Reader(['ch_sim', 'en'])
 
 
@@ -668,41 +668,32 @@ class T3DataSet(Dataset):
         cv2.imwrite(save_path, glyph_img)
 
 
-    def load_glyline_and_ocr(self, gly_line, text, language):
+    def load_glyline_and_ocr(self, gly_line, text, language, position, glyph, verbose=False):
         # load the jpg image
-        print('text', text)
-        print('gly_line', gly_line.shape)
+        if verbose:
+            print('target text', text, 'gly_line', gly_line.shape, 'glyph', glyph.shape, 'position', position.shape)
 
         # Permute to get it to (C, H, W) format and repeat to make it RGB
         gly_line = (gly_line - torch.min(gly_line)) / (torch.max(gly_line) - torch.min(gly_line) + 1e-6) * 255
         gly_line = gly_line.permute(2, 0, 1).repeat(3, 1, 1)  # Now shape is (3, 80, 512)
         gly_line = gly_line.numpy().astype(np.uint8)  # Convert to NumPy and ensure it's uint8
         gly_line = np.transpose(gly_line, (1, 2, 0))  # Transpose to (H, W, C) format for PIL
-        print('gly_line after', gly_line.shape)
 
         # Convert to PIL image required by OCR
         gly_line = Image.fromarray(gly_line).convert("RGB")
-
-        # gly_line = gly_line.permute(2, 0, 1).repeat(3, 1, 1).numpy().astype(np.uint8)
-        # print('gly_line after', gly_line.shape)
-        # gly_line = Image.fromarray(gly_line).convert("RGB")
-        # gly_line = (gly_line - np.min(gly_line)) / (np.max(gly_line) - np.min(gly_line) + 1e-6)
-        # gly_line[gly_line < 0.5] = 0
-        # gly_line[gly_line >= 0.5] = 1
 
         if language == 'Latin':
             ocr_result = self.ocr_en.ocr(np.asarray(gly_line), cls=True)
         else:  # chinese
             ocr_result = self.ocr_ch.ocr(np.asarray(gly_line), cls=True)
+        ocr_result = ocr_result[0][0]
 
         # For each detected OCR result
-        print('ocr_result', ocr_result)
-        for detected in ocr_result[0]:
-            print('detected', detected)
-            detected_box = detected[0]  # Bounding box of the detected text
-            detected_text = detected[1][0]  # Detected text itself
-            confidence = detected[1][1]  # Confidence score of the detected text
-            print('text', text, 'detected_text', detected_text, 'confidence', confidence, 'detected_box', detected_box)
+        detected_box = ocr_result[0]  # Bounding box of the detected text
+        detected_text = ocr_result[1][0]  # Detected text itself
+        confidence = ocr_result[1][1]  # Confidence score of the detected text
+        if verbose:
+            print('detected text', text, 'detected_text', detected_text, 'confidence', confidence, 'detected_box', detected_box, '\n')
 
 
     def draw_inv_mask(self, polygons):
@@ -844,8 +835,8 @@ if __name__ == '__main__':
             cv2.imwrite(os.path.join(show_imgs_dir, f'plots_{img_name}_inv_mask.jpg'), np.array(img)[..., ::-1] * (1 - data['inv_mask'][0].numpy().astype(np.int32)))
 
         else:
-            for k, gly_line in enumerate(data['gly_line']):
-                dataset.load_glyline_and_ocr(gly_line[0], data['texts'][0][k], data['language'][0][k])
+            for k in range(len(data['gly_line'])):
+                dataset.load_glyline_and_ocr(data['gly_line'][k][0], data['texts'][k], data['language'][k], data['positions'][k][0], data['glyphs'][k][0])
 
         pbar.update(1)
     pbar.close()
