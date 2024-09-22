@@ -224,11 +224,11 @@ def find_glyph2(img, position, scale=1, add_perturbation=True, max_offset=16):
     position = position.squeeze(-1)
     raw_position = position.copy()
 
-    # if scale != 1:
-    #     # Scale the image using interpolation
-    #     new_size = (int(img.shape[1] * scale), int(img.shape[0] * scale))  # (width, height)
-    #     img = cv2.resize(img, new_size, interpolation=cv2.INTER_NEAREST)  # Using bilinear interpolation
-    #     position = cv2.resize(position, new_size, interpolation=cv2.INTER_NEAREST)
+    if scale != 1:
+        # Scale the image using interpolation
+        new_size = (int(img.shape[1] * scale), int(img.shape[0] * scale))  # (width, height)
+        img = cv2.resize(img, new_size, interpolation=cv2.INTER_NEAREST)  # Using bilinear interpolation
+        position = cv2.resize(position, new_size, interpolation=cv2.INTER_NEAREST)
 
     # Apply the mask to the image, making pixels outside the polygon black
     img = img * position
@@ -428,7 +428,6 @@ class T3DataSet(Dataset):
 
         self.ocr_ch = PaddleOCR(use_angle_cls=True, show_log=False, lang="ch")  # need to run only once to download and load model into memory
         self.ocr_en = PaddleOCR(use_angle_cls=True, show_log=False, lang="en")
-        # self.ocr = easyocr.Reader(['ch_sim', 'en'])
 
 
     def load_data(self, json_path, glyph_path, percent):
@@ -627,6 +626,8 @@ class T3DataSet(Dataset):
         gly_line = gly_line.permute(2, 0, 1).repeat(3, 1, 1)  # Now shape is (3, 80, 512)
         gly_line = gly_line.numpy().astype(np.uint8)  # Convert to NumPy and ensure it's uint8
         gly_line = np.transpose(gly_line, (1, 2, 0))  # Transpose to (H, W, C) format for PIL
+
+        print('gly_line', np.max(gly_line), np.min(gly_line), gly_line.shape)
 
         # Convert to PIL image required by OCR
         gly_line = Image.fromarray(gly_line).convert("RGB")
