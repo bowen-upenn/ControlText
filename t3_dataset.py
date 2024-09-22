@@ -10,6 +10,8 @@ from dataset_util import load, show_bbox_on_image
 import time
 import argparse
 from shapely.geometry import Polygon
+import torch
+import paddle
 from paddleocr import PaddleOCR, draw_ocr
 # import easyocr
 
@@ -632,17 +634,19 @@ class T3DataSet(Dataset):
         used_polygons = set()  # To track which polygons have been used
         # For each detected OCR result
         for detected in ocr_result[0]:
+            print('detected', detected)
             detected_box = detected[0]  # Bounding box of the detected text
-            detected_text = detected[1]  # Detected text itself
-            confidence = detected[2]  # Confidence score of the detected text
-            print(f"Detected text: {detected_text}, confidence: {confidence}, box: {detected_box}")
+            detected_text = detected[1][0]  # Detected text itself
+            confidence = detected[1][1]  # Confidence score of the detected text
 
             # Find the nearest polygon from the provided polygons
             nearest_polygon, nearest_idx = find_nearest_polygon(detected_box, polygons)
+            print('nearest_idx', nearest_idx, 'nearest_polygon', nearest_polygon)
 
             if nearest_polygon is not None and nearest_idx not in used_polygons:
                 # Check if the detected text matches the provided text for this polygon
                 provided_text = texts[nearest_idx]
+                print(f"Detected text: {detected_text}, confidence: {confidence}, box: {detected_box}, provided text: {provided_text}")
                 if detected_text != provided_text and confidence > 0.5:
                     # If the text does not match, remove the text by filling the polygon with black
                     polygon_points = np.array(nearest_polygon, np.int32)
@@ -662,6 +666,43 @@ class T3DataSet(Dataset):
 
         save_path = glyph_path.replace('output', 'ocr_verified')
         cv2.imwrite(save_path, glyph_img)
+
+
+    def load_glyline_and_ocr(self, gly_line, text, language):
+        # load the jpg image
+        print('text', text)
+        print('gly_line', gly_line.shape)
+
+        # Permute to get it to (C, H, W) format and repeat to make it RGB
+        gly_line = (gly_line - torch.min(gly_line)) / (torch.max(gly_line) - torch.min(gly_line) + 1e-6) * 255
+        gly_line = gly_line.permute(2, 0, 1).repeat(3, 1, 1)  # Now shape is (3, 80, 512)
+        gly_line = gly_line.numpy().astype(np.uint8)  # Convert to NumPy and ensure it's uint8
+        gly_line = np.transpose(gly_line, (1, 2, 0))  # Transpose to (H, W, C) format for PIL
+        print('gly_line after', gly_line.shape)
+
+        # Convert to PIL image required by OCR
+        gly_line = Image.fromarray(gly_line).convert("RGB")
+
+        # gly_line = gly_line.permute(2, 0, 1).repeat(3, 1, 1).numpy().astype(np.uint8)
+        # print('gly_line after', gly_line.shape)
+        # gly_line = Image.fromarray(gly_line).convert("RGB")
+        # gly_line = (gly_line - np.min(gly_line)) / (np.max(gly_line) - np.min(gly_line) + 1e-6)
+        # gly_line[gly_line < 0.5] = 0
+        # gly_line[gly_line >= 0.5] = 1
+
+        if language == 'Latin':
+            ocr_result = self.ocr_en.ocr(np.asarray(gly_line), cls=True)
+        else:  # chinese
+            ocr_result = self.ocr_ch.ocr(np.asarray(gly_line), cls=True)
+
+        # For each detected OCR result
+        print('ocr_result', ocr_result)
+        for detected in ocr_result[0]:
+            print('detected', detected)
+            detected_box = detected[0]  # Bounding box of the detected text
+            detected_text = detected[1][0]  # Detected text itself
+            confidence = detected[1][1]  # Confidence score of the detected text
+            print('text', text, 'detected_text', detected_text, 'confidence', confidence, 'detected_box', detected_box)
 
 
     def draw_inv_mask(self, polygons):
@@ -714,7 +755,6 @@ if __name__ == '__main__':
     from matplotlib import pyplot as plt
     import shutil
 
-    import paddle
     paddle.set_device('cpu')
     print(paddle.is_compiled_with_cuda())
     print(paddle.device.get_device())
@@ -804,7 +844,8 @@ if __name__ == '__main__':
             cv2.imwrite(os.path.join(show_imgs_dir, f'plots_{img_name}_inv_mask.jpg'), np.array(img)[..., ::-1] * (1 - data['inv_mask'][0].numpy().astype(np.int32)))
 
         else:
-            dataset.load_all_glyphs_and_ocr(data['glyphs_path'][0], data['texts'][0], data['language'][0], data['polygons'][0])
+            for k, gly_line in enumerate(data['gly_line']):
+                dataset.load_glyline_and_ocr(gly_line[0], data['texts'][0][k], data['language'][0][k])
 
         pbar.update(1)
     pbar.close()
