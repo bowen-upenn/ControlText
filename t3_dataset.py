@@ -12,6 +12,7 @@ import argparse
 from shapely.geometry import Polygon
 import torch
 import torch.nn.functional as F
+import json
 import paddle
 from paddleocr import PaddleOCR, draw_ocr
 from difflib import SequenceMatcher
@@ -373,6 +374,21 @@ def find_nearest_polygon(detected_box, polygons):
     return best_polygon, best_idx
 
 
+# Function to append invalid gly_lines for an image to the JSON file
+def append_invalid_gly_lines_to_file(invalid_json_path, glyphs_path, invalid_gly_lines_curr_image):
+    # Read existing content
+    with open(invalid_json_path, 'r') as f:
+        existing_data = json.load(f)
+
+    # Add new entry for this glyph image
+    print('invalid_gly_lines_curr_image', invalid_gly_lines_curr_image)
+    existing_data[glyphs_path] = invalid_gly_lines_curr_image
+
+    # Write back the updated content to the JSON file
+    with open(invalid_json_path, 'w') as f:
+        json.dump(existing_data, f, indent=4)
+
+
 class T3DataSet(Dataset):
     def __init__(
             self,
@@ -616,7 +632,7 @@ class T3DataSet(Dataset):
         return len(self.data_list)
 
 
-    def load_glyline_and_ocr(self, gly_line, text, language, glyph_path,verbose=True):
+    def load_glyline_and_ocr(self, gly_line, text, language, glyph_path, verbose=True):
         # load the jpg image
         if verbose:
             print('target text', text, 'gly_line', gly_line.shape, 'glyph_path', glyph_path)
@@ -781,6 +797,10 @@ if __name__ == '__main__':
             # r'./Rethinking-Text-Segmentation/log/images/output/ReCTS'
         ]
 
+        invalid_json_path = './Rethinking-Text-Segmentation/log/images/ocr_verified/invalid_gly_lines.json'
+        with open(invalid_json_path, 'w') as f:
+            json.dump({}, f)
+
     dataset = T3DataSet(json_paths, glyph_paths, for_show=True, max_lines=20, glyph_scale=glyph_scale, mask_img_prob=1.0, caption_pos_prob=0.0)
     train_loader = DataLoader(dataset=dataset, batch_size=1, shuffle=False, num_workers=0)
     pbar = tqdm(total=show_count)
@@ -815,9 +835,10 @@ if __name__ == '__main__':
         else:
             has_good_quality = False
             filtered_glyphs = data['all_glyphs_from_segmentation'][0].unsqueeze(-1)
+            invalid_gly_lines_curr_image = []
 
             for k in range(len(data['gly_line'])):
-                good_quality = dataset.load_glyline_and_ocr(data['gly_line'][k][0], data['texts'][k][0], data['language'][k], data['glyphs_path'])
+                good_quality = dataset.load_glyline_and_ocr(data['gly_line'][k][0], data['texts'][k][0], data['language'][k], data['glyphs_path'][0])
                 if good_quality:
                     has_good_quality = True
                 else:
@@ -826,6 +847,13 @@ if __name__ == '__main__':
                     
                     # remove contents in the poor positions
                     filtered_glyphs[poor_positions < 0.5] = 0
+
+                    # If the gly_line is of poor quality, store relevant information
+                    invalid_entry = {
+                        'polygon': data['polygons'][k].tolist(),  # Store the polygon for this invalid gly_line
+                        'text': data['texts'][k][0],  # Store the text for this invalid gly_line
+                    }
+                    invalid_gly_lines_curr_image.append(invalid_entry)  # Add to the list of invalid gly_lines
 
             if has_good_quality:
                 # save filtered glyphs
@@ -836,6 +864,10 @@ if __name__ == '__main__':
                 saved_file_name = data['glyphs_path'][0].replace('/output/', '/ocr_verified/')
                 # print('saved_file_name', saved_file_name)
                 cv2.imwrite(saved_file_name, filtered_glyphs)
+
+            if len(invalid_gly_lines_curr_image) > 0:
+                # Append the invalid gly_lines for this image to the JSON file
+                append_invalid_gly_lines_to_file(invalid_json_path, data['glyphs_path'][0], invalid_gly_lines_curr_image)
 
         pbar.update(1)
     pbar.close()
