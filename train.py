@@ -16,6 +16,7 @@ grad_accum = 1  # enable perceptual loss may cost a lot of VRAM, you can set a s
 ckpt_path = None  # if not None, load ckpt_path and continue training task, will not load "resume_path"
 resume_path = './models/anytext_v1.1.ckpt' # './models/anytext_sd15_scratch.ckpt'  # finetune from scratch
 model_config = './models_yaml/anytext_sd15.yaml'  # use anytext_sd15_perloss.yaml to enable perceptual loss
+invalid_json_path = './Rethinking-Text-Segmentation/log/images/ocr_verified/invalid_gly_lines.json'
 logger_freq = 1000
 learning_rate = 2e-5  # default 2e-5
 mask_ratio = 1  # default 0.5, ratio of mask for inpainting(text editing task), set 0 to disable
@@ -84,7 +85,7 @@ if __name__ == '__main__':
         # r'./Rethinking-Text-Segmentation/log/images/output/MTWI2018',
         # r'./Rethinking-Text-Segmentation/log/images/output/ReCTS'
     ]
-    dataset = T3DataSet(json_paths, glyph_paths, max_lines=5, max_chars=20, caption_pos_prob=0.0, mask_pos_prob=1.0, mask_img_prob=mask_ratio, glyph_scale=2, percent=dataset_percent, debug=False, using_dlc=False, wm_thresh=wm_thresh)
+    dataset = T3DataSet(json_paths, glyph_paths, max_lines=5, max_chars=20, caption_pos_prob=0.0, mask_pos_prob=1.0, mask_img_prob=mask_ratio, glyph_scale=2, percent=dataset_percent, debug=False, using_dlc=False, wm_thresh=wm_thresh, invalid_json_path=invalid_json_path)
     dataloader = DataLoader(dataset, num_workers=8, persistent_workers=True, batch_size=batch_size, shuffle=True)
     logger = ImageLogger(batch_frequency=logger_freq)
     trainer = pl.Trainer(gpus=-1, precision=32, max_epochs=max_epochs, num_nodes=NUM_NODES, accumulate_grad_batches=grad_accum, callbacks=[logger, checkpoint_callback], default_root_dir=root_dir, strategy='ddp')

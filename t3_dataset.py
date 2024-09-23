@@ -381,7 +381,6 @@ def append_invalid_gly_lines_to_file(invalid_json_path, glyphs_path, invalid_gly
         existing_data = json.load(f)
 
     # Add new entry for this glyph image
-    print('invalid_gly_lines_curr_image', invalid_gly_lines_curr_image)
     existing_data[glyphs_path] = invalid_gly_lines_curr_image
 
     # Write back the updated content to the JSON file
@@ -407,6 +406,8 @@ class T3DataSet(Dataset):
             percent=1.0,
             debug=False,
             wm_thresh=1.0,
+            step='training',
+            invalid_json_path='./Rethinking-Text-Segmentation/log/images/ocr_verified/invalid_gly_lines.json',
     ):
         assert isinstance(json_path, (str, list))
         if isinstance(json_path, str):
@@ -428,6 +429,12 @@ class T3DataSet(Dataset):
         self.for_show = for_show
         self.glyph_scale = glyph_scale
         self.wm_thresh = wm_thresh
+
+        self.step = step
+        self.invalid_json_path = invalid_json_path
+        if self.step == 'training':
+            with open(self.invalid_json_path, 'r') as f:
+                self.invalid_glyph_lines = json.load(f)
 
         for jp, gp in zip(json_path, glyph_path):
             data_list += self.load_data(jp, gp, percent)
@@ -490,20 +497,35 @@ class T3DataSet(Dataset):
                 for annotation in gt['annotations']:
                     if len(annotation['polygon']) == 0:
                         continue
+                    # print('glyphs_path', glyphs_path, 'annotation', annotation)
+
+                    # filter out low-quality texts and their polygons
+                    if self.step == 'training' and glyphs_path in self.invalid_glyph_lines:
+                        if annotation['polygon'] in self.invalid_glyph_lines[glyphs_path]:
+                            invalid_polygons.append(annotation['polygon'])
+                            continue
+
                     if 'valid' in annotation and annotation['valid'] is False:
                         invalid_polygons.append(annotation['polygon'])
                         continue
+
                     polygons.append(annotation['polygon'])
                     texts.append(annotation['text'])
                     languages.append(annotation['language'])
                     if 'pos' in annotation:
                         pos.append(annotation['pos'])
+
+                if len(polygons) == 0:
+                    continue
+
                 info['polygons'] = [np.array(i) for i in polygons]
                 info['invalid_polygons'] = [np.array(i) for i in invalid_polygons]
                 info['texts'] = texts
                 info['language'] = languages
                 info['pos'] = pos
+
             d.append(info)
+
         print(f'{json_path} loaded, imgs={len(d)}, wm_skip={wm_skip}, time={(time.time() - tic):.2f}s')
         if count > 0:
             print(f"Found {count} image's caption contain placeholder: {self.place_holder}, change to ' '...")
@@ -543,8 +565,9 @@ class T3DataSet(Dataset):
                 pos_idxs = [cur_item['pos'][i] for i in sel_idxs]
             else:
                 pos_idxs = [-1 for i in sel_idxs]
-            item_dict['caption'] = get_caption_pos(item_dict['caption'], pos_idxs, self.caption_pos_porb, self.place_holder)
+
             item_dict['polygons'] = [cur_item['polygons'][i] for i in sel_idxs]
+            item_dict['caption'] = get_caption_pos(item_dict['caption'], pos_idxs, self.caption_pos_porb, self.place_holder)
             item_dict['texts'] = [cur_item['texts'][i][:self.max_chars] for i in sel_idxs]
             item_dict['language'] = [cur_item['language'][i] for i in sel_idxs]
 
@@ -632,7 +655,7 @@ class T3DataSet(Dataset):
         return len(self.data_list)
 
 
-    def load_glyline_and_ocr(self, gly_line, text, language, glyph_path, verbose=True):
+    def load_glyline_and_ocr(self, gly_line, text, language, glyph_path, verbose=False):
         # load the jpg image
         if verbose:
             print('target text', text, 'gly_line', gly_line.shape, 'glyph_path', glyph_path)
@@ -643,8 +666,6 @@ class T3DataSet(Dataset):
         gly_line = gly_line.numpy().astype(np.uint8)  # Convert to NumPy and ensure it's uint8
         gly_line = np.transpose(gly_line, (1, 2, 0))  # Transpose to (H, W, C) format for PIL
 
-        print('gly_line', np.max(gly_line), np.min(gly_line), gly_line.shape)
-
         # Convert to PIL image required by OCR
         gly_line = Image.fromarray(gly_line).convert("RGB")
 
@@ -652,7 +673,6 @@ class T3DataSet(Dataset):
             ocr_result = self.ocr_en.ocr(np.asarray(gly_line), cls=True)
         else:  # chinese
             ocr_result = self.ocr_ch.ocr(np.asarray(gly_line), cls=True)
-        print('ocr_result', ocr_result)
 
         if ocr_result is not None and ocr_result[0] is not None:
             ocr_result = ocr_result[0][0]
@@ -749,7 +769,9 @@ if __name__ == '__main__':
     step = cmd_args.step
 
     show_imgs_dir = 'show_results'
-    show_count = 10
+    invalid_json_path = './Rethinking-Text-Segmentation/log/images/ocr_verified/invalid_gly_lines.json'
+
+    show_count = -1
     glyph_scale = 2
     if os.path.exists(show_imgs_dir):
         shutil.rmtree(show_imgs_dir)
@@ -797,15 +819,14 @@ if __name__ == '__main__':
             # r'./Rethinking-Text-Segmentation/log/images/output/ReCTS'
         ]
 
-        invalid_json_path = './Rethinking-Text-Segmentation/log/images/ocr_verified/invalid_gly_lines.json'
         with open(invalid_json_path, 'w') as f:
             json.dump({}, f)
 
-    dataset = T3DataSet(json_paths, glyph_paths, for_show=True, max_lines=20, glyph_scale=glyph_scale, mask_img_prob=1.0, caption_pos_prob=0.0)
+    dataset = T3DataSet(json_paths, glyph_paths, for_show=True, max_lines=20, glyph_scale=glyph_scale, mask_img_prob=1.0, caption_pos_prob=0.0, step=step, invalid_json_path=invalid_json_path)
     train_loader = DataLoader(dataset=dataset, batch_size=1, shuffle=False, num_workers=0)
-    pbar = tqdm(total=show_count)
+    pbar = tqdm(total=show_count if show_count != -1 else len(train_loader))
     for i, data in enumerate(train_loader):
-        if i == show_count:
+        if show_count != -1 and i == show_count:
             break
 
         if step == 'show_results':
