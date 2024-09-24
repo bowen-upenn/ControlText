@@ -20,6 +20,7 @@ from difflib import SequenceMatcher
 import torch.distributed as dist
 from torch.utils.data import DataLoader, DistributedSampler
 import torch.multiprocessing as mp
+from filelock import FileLock
 
 
 # Initialize distributed process group for multiple GPUs
@@ -411,8 +412,10 @@ def append_invalid_gly_lines_to_file(invalid_json_path, glyphs_path, invalid_gly
     existing_data[glyphs_path] = invalid_gly_lines_curr_image
 
     # Write back the updated content to the JSON file
-    with open(invalid_json_path, 'w') as f:
-        json.dump(existing_data, f, indent=4)
+    lock_path = invalid_json_path + ".lock"
+    with FileLock(lock_path):  # Lock the file while reading/writing
+        with open(invalid_json_path, 'w') as f:
+            json.dump(existing_data, f, indent=4)
 
 
 class T3DataSet(Dataset):
@@ -782,11 +785,11 @@ class T3DataSet(Dataset):
         return np.sum(positions, axis=0).clip(0, 1)
 
 
-def run_inference(rank, world_size, json_paths, glyph_paths, glyph_scale, show_count, step, invalid_json_path):
+def run_inference(rank, world_size, json_paths, glyph_paths, glyph_scale, show_count, dataset_percent, step, invalid_json_path):
     # Setup distributed environment
     setup(rank, world_size)
 
-    dataset = T3DataSet(json_paths, glyph_paths, for_show=True, max_lines=20, glyph_scale=glyph_scale, mask_img_prob=1.0, caption_pos_prob=0.0, step=step, invalid_json_path=invalid_json_path)
+    dataset = T3DataSet(json_paths, glyph_paths, for_show=True, max_lines=20, glyph_scale=glyph_scale, percent=dataset_percent, mask_img_prob=1.0, caption_pos_prob=0.0, step=step, invalid_json_path=invalid_json_path)
     if world_size == 1:
         train_loader = DataLoader(dataset=dataset, batch_size=1, shuffle=False, num_workers=0, collate_fn=collate_fn)
     else:
@@ -899,6 +902,7 @@ if __name__ == '__main__':
 
     show_count = -1
     glyph_scale = 2
+    dataset_percent = 0.0566   # 1.0 use full datasets, 0.0566 use ~200k images for ablation study
     if os.path.exists(show_imgs_dir):
         shutil.rmtree(show_imgs_dir)
     os.makedirs(show_imgs_dir)
@@ -914,12 +918,12 @@ if __name__ == '__main__':
     else:
         json_paths = [
             # r'/tmp/datasets/AnyWord-3M/link_download/laion/test_data_v1.1.json',
-            # r'/tmp/datasets/AnyWord-3M/link_download/laion/data_v1.1.json',
-            # r'/tmp/datasets/AnyWord-3M/link_download/wukong_1of5/data_v1.1.json',
-            # r'/tmp/datasets/AnyWord-3M/link_download/wukong_2of5/data_v1.1.json',
-            # r'/tmp/datasets/AnyWord-3M/link_download/wukong_3of5/data_v1.1.json',
-            # r'/tmp/datasets/AnyWord-3M/link_download/wukong_4of5/data_v1.1.json',
-            # r'/tmp/datasets/AnyWord-3M/link_download/wukong_5of5/data_v1.1.json',
+            r'/tmp/datasets/AnyWord-3M/link_download/laion/data_v1.1.json',
+            r'/tmp/datasets/AnyWord-3M/link_download/wukong_1of5/data_v1.1.json',
+            r'/tmp/datasets/AnyWord-3M/link_download/wukong_2of5/data_v1.1.json',
+            r'/tmp/datasets/AnyWord-3M/link_download/wukong_3of5/data_v1.1.json',
+            r'/tmp/datasets/AnyWord-3M/link_download/wukong_4of5/data_v1.1.json',
+            r'/tmp/datasets/AnyWord-3M/link_download/wukong_5of5/data_v1.1.json',
             r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/Art/data.json',
             r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/COCO_Text/data.json',
             r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/icdar2017rctw/data.json',
@@ -930,12 +934,12 @@ if __name__ == '__main__':
         ]
         glyph_paths = [
             # r'./Rethinking-Text-Segmentation/log/images/output/laion_test',
-            # r'./Rethinking-Text-Segmentation/log/images/output/laion',
-            # r'./Rethinking-Text-Segmentation/log/images/output/wukong_1of5',
-            # r'./Rethinking-Text-Segmentation/log/images/output/wukong_2of5',
-            # r'./Rethinking-Text-Segmentation/log/images/output/wukong_3of5',
-            # r'./Rethinking-Text-Segmentation/log/images/output/wukong_4of5',
-            # r'./Rethinking-Text-Segmentation/log/images/output/wukong_5of5',
+            r'./Rethinking-Text-Segmentation/log/images/output/laion',
+            r'./Rethinking-Text-Segmentation/log/images/output/wukong_1of5',
+            r'./Rethinking-Text-Segmentation/log/images/output/wukong_2of5',
+            r'./Rethinking-Text-Segmentation/log/images/output/wukong_3of5',
+            r'./Rethinking-Text-Segmentation/log/images/output/wukong_4of5',
+            r'./Rethinking-Text-Segmentation/log/images/output/wukong_5of5',
             r'./Rethinking-Text-Segmentation/log/images/output/Art',
             r'./Rethinking-Text-Segmentation/log/images/output/COCO_Text',
             r'./Rethinking-Text-Segmentation/log/images/output/icdar2017rctw',
@@ -946,10 +950,10 @@ if __name__ == '__main__':
         ]
 
         # Check if the file exists
-        if not os.path.exists(invalid_json_path):
-            # If the file does not exist, create it with an empty dictionary
-            with open(invalid_json_path, 'w') as f:
-                json.dump({}, f)
+        # if not os.path.exists(invalid_json_path):
+        # If the file does not exist, create it with an empty dictionary
+        with open(invalid_json_path, 'w') as f:
+            json.dump({}, f)
 
-    mp.spawn(run_inference, nprocs=world_size, args=(world_size, json_paths, glyph_paths, glyph_scale, show_count, step, invalid_json_path))
+    mp.spawn(run_inference, nprocs=world_size, args=(world_size, json_paths, glyph_paths, glyph_scale, show_count, dataset_percent, step, invalid_json_path))
     cleanup()
