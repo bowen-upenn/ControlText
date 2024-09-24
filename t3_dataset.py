@@ -13,11 +13,37 @@ from shapely.geometry import Polygon
 import torch
 import torch.nn.functional as F
 import json
+from tqdm import tqdm
 import paddle
 from paddleocr import PaddleOCR, draw_ocr
 from difflib import SequenceMatcher
+import torch.distributed as dist
+from torch.utils.data import DataLoader, DistributedSampler
+import torch.multiprocessing as mp
 
 
+# Initialize distributed process group for multiple GPUs
+def setup(rank, world_size):
+    os.environ['MASTER_ADDR'] = 'localhost'
+    os.environ['MASTER_PORT'] = '12356'
+    dist.init_process_group("gloo", rank=rank, world_size=world_size)
+
+
+def cleanup():
+    dist.destroy_process_group()
+
+
+def collate_fn(batch):
+    # Filter out dictionaries that contain None in any of their values
+    valid_batch = [item for item in batch if all(v is not None for v in item.values())]
+
+    # Check if the filtered batch is empty
+    if len(valid_batch) == 0:
+        return []
+
+    return torch.utils.data.dataloader.default_collate(valid_batch)
+    
+    
 phrase_list = [
     ', content and position of the texts are ',
     ', textual material depicted in the image are ',
@@ -227,8 +253,9 @@ def find_glyph2(img, position, scale=1, add_perturbation=True, max_offset=16):
 
     if scale != 1:
         # Scale the image using interpolation
-        new_size = (int(img.shape[1] * scale), int(img.shape[0] * scale))  # (width, height)
-        img = cv2.resize(img, new_size, interpolation=cv2.INTER_NEAREST)  # Using bilinear interpolation
+        new_size = (int(position.shape[1] * scale), int(position.shape[0] * scale))  # (width, height)
+        # if img.shape != new_size:
+        img = cv2.resize(img, new_size, interpolation=cv2.INTER_NEAREST)
         position = cv2.resize(position, new_size, interpolation=cv2.INTER_NEAREST)
 
     # Apply the mask to the image, making pixels outside the polygon black
@@ -520,6 +547,8 @@ class T3DataSet(Dataset):
 
                 info['polygons'] = [np.array(i) for i in polygons]
                 info['invalid_polygons'] = [np.array(i) for i in invalid_polygons]
+                if len(texts) == 0:
+                    continue
                 info['texts'] = texts
                 info['language'] = languages
                 info['pos'] = pos
@@ -552,6 +581,8 @@ class T3DataSet(Dataset):
         item_dict['texts'] = []
         item_dict['language'] = []
         item_dict['inv_mask'] = []
+        item_dict['all_glyphs_from_segmentation'] = None
+        item_dict['polygons'] = None
         texts = cur_item.get('texts', [])
         if len(texts) > 0:
             idxs = [i for i in range(len(texts))]
@@ -751,81 +782,23 @@ class T3DataSet(Dataset):
         return np.sum(positions, axis=0).clip(0, 1)
 
 
-if __name__ == '__main__':
-    '''
-    Run this script to show details of your dataset, such as ocr annotations, glyphs, prompts, etc.
-    '''
-    from tqdm import tqdm
-    from matplotlib import pyplot as plt
-    import shutil
-
-    paddle.set_device('cpu')
-    print('paddle.is_compiled_with_cuda()', paddle.is_compiled_with_cuda())
-    print('paddle.device.get_device()', paddle.device.get_device())
-
-    parser = argparse.ArgumentParser(description='Command line arguments')
-    parser.add_argument('--step', type=str, default="show_results", help='show_results or process_segmentations')
-    cmd_args = parser.parse_args()
-    step = cmd_args.step
-
-    show_imgs_dir = 'show_results'
-    invalid_json_path = './Rethinking-Text-Segmentation/log/images/ocr_verified/invalid_gly_lines.json'
-
-    show_count = -1
-    glyph_scale = 2
-    if os.path.exists(show_imgs_dir):
-        shutil.rmtree(show_imgs_dir)
-    os.makedirs(show_imgs_dir)
-    plt.rcParams['axes.unicode_minus'] = False
-
-    if step == 'show_results':
-        json_paths = [
-            r'/tmp/datasets/AnyWord-3M/link_download/laion/test_data_v1.1.json',
-        ]
-        glyph_paths = [
-            r'./Rethinking-Text-Segmentation/log/images/output/laion_test',
-        ]
-    else:
-        json_paths = [
-            r'/tmp/datasets/AnyWord-3M/link_download/laion/test_data_v1.1.json',
-            # r'/tmp/datasets/AnyWord-3M/link_download/laion/data_v1.1.json',
-            # r'/tmp/datasets/AnyWord-3M/link_download/wukong_1of5/data_v1.1.json',
-            # r'/tmp/datasets/AnyWord-3M/link_download/wukong_2of5/data_v1.1.json',
-            # r'/tmp/datasets/AnyWord-3M/link_download/wukong_3of5/data_v1.1.json',
-            # r'/tmp/datasets/AnyWord-3M/link_download/wukong_4of5/data_v1.1.json',
-            # r'/tmp/datasets/AnyWord-3M/link_download/wukong_5of5/data_v1.1.json',
-            # r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/Art/data.json',
-            # r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/COCO_Text/data.json',
-            # r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/icdar2017rctw/data.json',
-            # r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/LSVT/data.json',
-            # r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/mlt2019/data.json',
-            # r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/MTWI2018/data.json',
-            # r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/ReCTS/data.json'
-        ]
-        glyph_paths = [
-            r'./Rethinking-Text-Segmentation/log/images/output/laion_test',
-            # r'./Rethinking-Text-Segmentation/log/images/output/laion',
-            # r'./Rethinking-Text-Segmentation/log/images/output/wukong_1of5',
-            # r'./Rethinking-Text-Segmentation/log/images/output/wukong_2of5',
-            # r'./Rethinking-Text-Segmentation/log/images/output/wukong_3of5',
-            # r'./Rethinking-Text-Segmentation/log/images/output/wukong_4of5',
-            # r'./Rethinking-Text-Segmentation/log/images/output/wukong_5of5',
-            # r'./Rethinking-Text-Segmentation/log/images/output/Art',
-            # r'./Rethinking-Text-Segmentation/log/images/output/COCO_Text',
-            # r'./Rethinking-Text-Segmentation/log/images/output/icdar2017rctw',
-            # r'./Rethinking-Text-Segmentation/log/images/output/LSVT',
-            # r'./Rethinking-Text-Segmentation/log/images/output/mlt2019',
-            # r'./Rethinking-Text-Segmentation/log/images/output/MTWI2018',
-            # r'./Rethinking-Text-Segmentation/log/images/output/ReCTS'
-        ]
-
-        with open(invalid_json_path, 'w') as f:
-            json.dump({}, f)
+def run_inference(rank, world_size, json_paths, glyph_paths, glyph_scale, show_count, step, invalid_json_path):
+    # Setup distributed environment
+    setup(rank, world_size)
 
     dataset = T3DataSet(json_paths, glyph_paths, for_show=True, max_lines=20, glyph_scale=glyph_scale, mask_img_prob=1.0, caption_pos_prob=0.0, step=step, invalid_json_path=invalid_json_path)
-    train_loader = DataLoader(dataset=dataset, batch_size=1, shuffle=False, num_workers=0)
+    if world_size == 1:
+        train_loader = DataLoader(dataset=dataset, batch_size=1, shuffle=False, num_workers=0, collate_fn=collate_fn)
+    else:
+        # Use DistributedSampler for multi-GPU training
+        sampler = DistributedSampler(dataset, num_replicas=world_size, rank=rank, shuffle=False)
+        train_loader = DataLoader(dataset=dataset, batch_size=1, shuffle=False, num_workers=0, sampler=sampler, collate_fn=collate_fn)
+
     pbar = tqdm(total=show_count if show_count != -1 else len(train_loader))
     for i, data in enumerate(train_loader):
+        if not data:    # Skip empty batches
+            continue
+
         if show_count != -1 and i == show_count:
             break
 
@@ -855,36 +828,40 @@ if __name__ == '__main__':
 
         else:
             has_good_quality = False
-            filtered_glyphs = data['all_glyphs_from_segmentation'][0].unsqueeze(-1)
-            invalid_gly_lines_curr_image = []
+            filtered_glyphs = data['all_glyphs_from_segmentation'][0]
+            if filtered_glyphs is None:
+                invalid_gly_lines_curr_image = [{'polygon': [], 'text': ''}]
+            else:
+                filtered_glyphs = data['all_glyphs_from_segmentation'][0].unsqueeze(-1)
+                invalid_gly_lines_curr_image = []
 
-            for k in range(len(data['gly_line'])):
-                good_quality = dataset.load_glyline_and_ocr(data['gly_line'][k][0], data['texts'][k][0], data['language'][k], data['glyphs_path'][0])
-                if good_quality:
-                    has_good_quality = True
-                else:
-                    poor_positions = data['positions'][k][0]
-                    poor_positions = 1 - poor_positions
-                    
-                    # remove contents in the poor positions
-                    filtered_glyphs[poor_positions < 0.5] = 0
+                for k in range(len(data['gly_line'])):
+                    good_quality = dataset.load_glyline_and_ocr(data['gly_line'][k][0], data['texts'][k][0], data['language'][k], data['glyphs_path'][0])
+                    if good_quality:
+                        has_good_quality = True
+                    else:
+                        poor_positions = data['positions'][k][0]
+                        poor_positions = 1 - poor_positions
 
-                    # If the gly_line is of poor quality, store relevant information
-                    invalid_entry = {
-                        'polygon': data['polygons'][k].tolist(),  # Store the polygon for this invalid gly_line
-                        'text': data['texts'][k][0],  # Store the text for this invalid gly_line
-                    }
-                    invalid_gly_lines_curr_image.append(invalid_entry)  # Add to the list of invalid gly_lines
+                        # remove contents in the poor positions
+                        filtered_glyphs[poor_positions < 0.5] = 0
 
-            if has_good_quality:
-                # save filtered glyphs
-                if glyph_scale != 1:
-                    new_size = (int(filtered_glyphs.shape[1] * glyph_scale), int(filtered_glyphs.shape[0] * glyph_scale))  # (width, height)
-                    filtered_glyphs = cv2.resize(filtered_glyphs.numpy(), new_size, interpolation=cv2.INTER_AREA) * 255
+                        # If the gly_line is of poor quality, store relevant information
+                        invalid_entry = {
+                            'polygon': data['polygons'][k].tolist(),  # Store the polygon for this invalid gly_line
+                            'text': data['texts'][k][0],  # Store the text for this invalid gly_line
+                        }
+                        invalid_gly_lines_curr_image.append(invalid_entry)  # Add to the list of invalid gly_lines
 
-                saved_file_name = data['glyphs_path'][0].replace('/output/', '/ocr_verified/')
-                # print('saved_file_name', saved_file_name)
-                cv2.imwrite(saved_file_name, filtered_glyphs)
+                if has_good_quality:
+                    # save filtered glyphs
+                    # if glyph_scale != 1:
+                    #     new_size = (int(filtered_glyphs.shape[1] * glyph_scale), int(filtered_glyphs.shape[0] * glyph_scale))  # (width, height)
+                    #     filtered_glyphs = cv2.resize(filtered_glyphs.numpy(), new_size, interpolation=cv2.INTER_AREA) * 255
+
+                    saved_file_name = data['glyphs_path'][0].replace('/output/', '/ocr_verified/')
+                    # print('saved_file_name', saved_file_name)
+                    cv2.imwrite(saved_file_name, filtered_glyphs.numpy() * 255)
 
             if len(invalid_gly_lines_curr_image) > 0:
                 # Append the invalid gly_lines for this image to the JSON file
@@ -892,3 +869,87 @@ if __name__ == '__main__':
 
         pbar.update(1)
     pbar.close()
+
+
+if __name__ == '__main__':
+    '''
+    Run this script to show details of your dataset, such as ocr annotations, glyphs, prompts, etc.
+    '''
+    from tqdm import tqdm
+    from matplotlib import pyplot as plt
+    import shutil
+
+    paddle.set_device('cpu')
+    print('paddle.is_compiled_with_cuda()', paddle.is_compiled_with_cuda())
+    print('paddle.device.get_device()', paddle.device.get_device())
+
+    world_size = torch.cuda.device_count()
+    print('torch.distributed.is_available', torch.distributed.is_available())
+    print('Using %d GPUs' % (torch.cuda.device_count()))
+
+    parser = argparse.ArgumentParser(description='Command line arguments')
+    parser.add_argument('--step', type=str, default="show_results", help='show_results or process_segmentations')
+    cmd_args = parser.parse_args()
+    step = cmd_args.step
+    if step == 'show_results':
+        assert world_size == 1
+
+    show_imgs_dir = 'show_results'
+    invalid_json_path = './Rethinking-Text-Segmentation/log/images/ocr_verified/invalid_gly_lines.json'
+
+    show_count = -1
+    glyph_scale = 2
+    if os.path.exists(show_imgs_dir):
+        shutil.rmtree(show_imgs_dir)
+    os.makedirs(show_imgs_dir)
+    plt.rcParams['axes.unicode_minus'] = False
+
+    if step == 'show_results':
+        json_paths = [
+            r'/tmp/datasets/AnyWord-3M/link_download/laion/test_data_v1.1.json',
+        ]
+        glyph_paths = [
+            r'./Rethinking-Text-Segmentation/log/images/output/laion_test',
+        ]
+    else:
+        json_paths = [
+            # r'/tmp/datasets/AnyWord-3M/link_download/laion/test_data_v1.1.json',
+            # r'/tmp/datasets/AnyWord-3M/link_download/laion/data_v1.1.json',
+            # r'/tmp/datasets/AnyWord-3M/link_download/wukong_1of5/data_v1.1.json',
+            # r'/tmp/datasets/AnyWord-3M/link_download/wukong_2of5/data_v1.1.json',
+            # r'/tmp/datasets/AnyWord-3M/link_download/wukong_3of5/data_v1.1.json',
+            # r'/tmp/datasets/AnyWord-3M/link_download/wukong_4of5/data_v1.1.json',
+            # r'/tmp/datasets/AnyWord-3M/link_download/wukong_5of5/data_v1.1.json',
+            r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/Art/data.json',
+            r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/COCO_Text/data.json',
+            r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/icdar2017rctw/data.json',
+            r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/LSVT/data.json',
+            r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/mlt2019/data.json',
+            r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/MTWI2018/data.json',
+            r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/ReCTS/data.json'
+        ]
+        glyph_paths = [
+            # r'./Rethinking-Text-Segmentation/log/images/output/laion_test',
+            # r'./Rethinking-Text-Segmentation/log/images/output/laion',
+            # r'./Rethinking-Text-Segmentation/log/images/output/wukong_1of5',
+            # r'./Rethinking-Text-Segmentation/log/images/output/wukong_2of5',
+            # r'./Rethinking-Text-Segmentation/log/images/output/wukong_3of5',
+            # r'./Rethinking-Text-Segmentation/log/images/output/wukong_4of5',
+            # r'./Rethinking-Text-Segmentation/log/images/output/wukong_5of5',
+            r'./Rethinking-Text-Segmentation/log/images/output/Art',
+            r'./Rethinking-Text-Segmentation/log/images/output/COCO_Text',
+            r'./Rethinking-Text-Segmentation/log/images/output/icdar2017rctw',
+            r'./Rethinking-Text-Segmentation/log/images/output/LSVT',
+            r'./Rethinking-Text-Segmentation/log/images/output/mlt2019',
+            r'./Rethinking-Text-Segmentation/log/images/output/MTWI2018',
+            r'./Rethinking-Text-Segmentation/log/images/output/ReCTS'
+        ]
+
+        # Check if the file exists
+        if not os.path.exists(invalid_json_path):
+            # If the file does not exist, create it with an empty dictionary
+            with open(invalid_json_path, 'w') as f:
+                json.dump({}, f)
+
+    mp.spawn(run_inference, nprocs=world_size, args=(world_size, json_paths, glyph_paths, glyph_scale, show_count, step, invalid_json_path))
+    cleanup()

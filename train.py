@@ -70,20 +70,20 @@ if __name__ == '__main__':
         # r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/ReCTS/data.json'
     ]
     glyph_paths = [
-        r'./Rethinking-Text-Segmentation/log/images/output/laion_test',
-        # r'./Rethinking-Text-Segmentation/log/images/output/laion',
-        # r'./Rethinking-Text-Segmentation/log/images/output/wukong_1of5',
-        # r'./Rethinking-Text-Segmentation/log/images/output/wukong_2of5',
-        # r'./Rethinking-Text-Segmentation/log/images/output/wukong_3of5',
-        # r'./Rethinking-Text-Segmentation/log/images/output/wukong_4of5',
-        # r'./Rethinking-Text-Segmentation/log/images/output/wukong_5of5',
-        # r'./Rethinking-Text-Segmentation/log/images/output/Art',
-        # r'./Rethinking-Text-Segmentation/log/images/output/COCO_Text',
-        # r'./Rethinking-Text-Segmentation/log/images/output/icdar2017rctw',
-        # r'./Rethinking-Text-Segmentation/log/images/output/LSVT',
-        # r'./Rethinking-Text-Segmentation/log/images/output/mlt2019',
-        # r'./Rethinking-Text-Segmentation/log/images/output/MTWI2018',
-        # r'./Rethinking-Text-Segmentation/log/images/output/ReCTS'
+        r'./Rethinking-Text-Segmentation/log/images/ocr_verified/laion_test',
+        # r'./Rethinking-Text-Segmentation/log/images/ocr_verified/laion',
+        # r'./Rethinking-Text-Segmentation/log/images/ocr_verified/wukong_1of5',
+        # r'./Rethinking-Text-Segmentation/log/images/ocr_verified/wukong_2of5',
+        # r'./Rethinking-Text-Segmentation/log/images/ocr_verified/wukong_3of5',
+        # r'./Rethinking-Text-Segmentation/log/images/ocr_verified/wukong_4of5',
+        # r'./Rethinking-Text-Segmentation/log/images/ocr_verified/wukong_5of5',
+        # r'./Rethinking-Text-Segmentation/log/images/ocr_verified/Art',
+        # r'./Rethinking-Text-Segmentation/log/images/ocr_verified/COCO_Text',
+        # r'./Rethinking-Text-Segmentation/log/images/ocr_verified/icdar2017rctw',
+        # r'./Rethinking-Text-Segmentation/log/images/ocr_verified/LSVT',
+        # r'./Rethinking-Text-Segmentation/log/images/ocr_verified/mlt2019',
+        # r'./Rethinking-Text-Segmentation/log/images/ocr_verified/MTWI2018',
+        # r'./Rethinking-Text-Segmentation/log/images/ocr_verified/ReCTS'
     ]
     dataset = T3DataSet(json_paths, glyph_paths, max_lines=5, max_chars=20, caption_pos_prob=0.0, mask_pos_prob=1.0, mask_img_prob=mask_ratio, glyph_scale=2, percent=dataset_percent, debug=False, using_dlc=False, wm_thresh=wm_thresh, invalid_json_path=invalid_json_path)
     dataloader = DataLoader(dataset, num_workers=8, persistent_workers=True, batch_size=batch_size, shuffle=True)
