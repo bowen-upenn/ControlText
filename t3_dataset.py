@@ -513,6 +513,9 @@ class T3DataSet(Dataset):
             #     gt['img_name'] = gt['img_name'].replace('.jpg.jpg', '.jpg')
             glyphs_path = os.path.join(glyph_path, gt['img_name'])
             info['glyphs_path'] = glyphs_path
+            if self.step == 'training':
+                if not os.path.exists(glyphs_path):
+                    continue
 
             info['caption'] = gt['caption'] if 'caption' in gt else ''
             if self.place_holder in info['caption']:
