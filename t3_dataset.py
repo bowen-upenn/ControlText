@@ -404,16 +404,16 @@ def find_nearest_polygon(detected_box, polygons):
 
 # Function to append invalid gly_lines for an image to the JSON file
 def append_invalid_gly_lines_to_file(invalid_json_path, glyphs_path, invalid_gly_lines_curr_image):
-    # Read existing content
-    with open(invalid_json_path, 'r') as f:
-        existing_data = json.load(f)
-
-    # Add new entry for this glyph image
-    existing_data[glyphs_path] = invalid_gly_lines_curr_image
-
     # Write back the updated content to the JSON file
     lock_path = invalid_json_path + ".lock"
     with FileLock(lock_path):  # Lock the file while reading/writing
+        # Read existing content
+        with open(invalid_json_path, 'r') as f:
+            existing_data = json.load(f)
+
+        # Add new entry for this glyph image
+        existing_data[glyphs_path] = invalid_gly_lines_curr_image
+
         with open(invalid_json_path, 'w') as f:
             json.dump(existing_data, f, indent=4)
 
