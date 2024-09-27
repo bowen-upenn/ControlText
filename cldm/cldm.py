@@ -32,15 +32,20 @@ class ControlledUnetModel(UNetModel):
     def forward(self, x, timesteps=None, context=None, control=None, only_mid_control=False, **kwargs):
         hs = []
         with torch.no_grad():
+            print('test1')
             t_emb = timestep_embedding(timesteps, self.model_channels, repeat_only=False)
+            print('test2')
             if self.use_fp16:
                 t_emb = t_emb.half()
             emb = self.time_embed(t_emb)
+            print('test3')
             h = x.type(self.dtype)
             for module in self.input_blocks:
                 h = module(h, emb, context)
                 hs.append(h)
+            print('test4')
             h = self.middle_block(h, emb, context)
+            print('test5')
 
         if control is not None:
             h += control.pop()

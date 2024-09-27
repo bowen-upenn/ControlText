@@ -403,7 +403,7 @@ def find_nearest_polygon(detected_box, polygons):
 
 
 # Function to append invalid gly_lines for an image to the JSON file
-def append_invalid_gly_lines_to_file(invalid_json_path, glyphs_path, invalid_gly_lines_curr_image):
+def append_invalid_gly_lines_to_file(invalid_json_path, invalid_gly_lines):
     # Write back the updated content to the JSON file
     lock_path = invalid_json_path + ".lock"
     with FileLock(lock_path):  # Lock the file while reading/writing
@@ -411,8 +411,9 @@ def append_invalid_gly_lines_to_file(invalid_json_path, glyphs_path, invalid_gly
         with open(invalid_json_path, 'r') as f:
             existing_data = json.load(f)
 
-        # Add new entry for this glyph image
-        existing_data[glyphs_path] = invalid_gly_lines_curr_image
+        # Add new entry for these glyph images
+        for glyphs_path in invalid_gly_lines.keys():
+            existing_data[glyphs_path] = invalid_gly_lines[glyphs_path]
 
         with open(invalid_json_path, 'w') as f:
             json.dump(existing_data, f, indent=4)
@@ -462,9 +463,9 @@ class T3DataSet(Dataset):
 
         self.step = step
         self.invalid_json_path = invalid_json_path
-        if self.step == 'training':
-            with open(self.invalid_json_path, 'r') as f:
-                self.invalid_glyph_lines = json.load(f)
+        # if self.step == 'training':
+        #     with open(self.invalid_json_path, 'r') as f:
+        #         self.invalid_glyph_lines = json.load(f)
 
         for jp, gp in zip(json_path, glyph_path):
             data_list += self.load_data(jp, gp, percent)
@@ -533,10 +534,12 @@ class T3DataSet(Dataset):
                     # print('glyphs_path', glyphs_path, 'annotation', annotation)
 
                     # filter out low-quality texts and their polygons
-                    if self.step == 'training' and glyphs_path in self.invalid_glyph_lines:
-                        if annotation['polygon'] in self.invalid_glyph_lines[glyphs_path]:
-                            invalid_polygons.append(annotation['polygon'])
-                            continue
+                    # if self.step == 'training' and glyphs_path in self.invalid_glyph_lines:
+                    #     if len(annotation['polygon']) == 0:
+                    #         continue
+                    #     if annotation['polygon'] in self.invalid_glyph_lines[glyphs_path]:
+                    #         invalid_polygons.append(annotation['polygon'])
+                    #         continue
 
                     if 'valid' in annotation and annotation['valid'] is False:
                         invalid_polygons.append(annotation['polygon'])
@@ -619,7 +622,7 @@ class T3DataSet(Dataset):
 
             if all_glyphs_from_segmentation is not None:
                 for idx, text in enumerate(item_dict['texts']):
-                    glyphs, glyphs_raw, position = find_glyph2(all_glyphs_from_segmentation, item_dict['positions'][idx], scale=self.glyph_scale)
+                    glyphs, glyphs_raw, position = find_glyph2(all_glyphs_from_segmentation, item_dict['positions'][idx], scale=self.glyph_scale, add_perturbation=self.step=='training')
                     if glyphs_raw is not None:
                         gly_line, aspect_ratio = find_glyph(glyphs_raw, item_dict['polygons'][idx], scale=self.glyph_scale)
                         item_dict['positions'][idx] = position
@@ -788,7 +791,7 @@ class T3DataSet(Dataset):
         return np.sum(positions, axis=0).clip(0, 1)
 
 
-def run_inference(rank, world_size, json_paths, glyph_paths, glyph_scale, show_count, dataset_percent, step, invalid_json_path):
+def run_inference(rank, world_size, json_paths, glyph_paths, glyph_scale, show_count, dataset_percent, step, invalid_json_path, json_write_freq):
     # Setup distributed environment
     setup(rank, world_size)
 
@@ -799,6 +802,8 @@ def run_inference(rank, world_size, json_paths, glyph_paths, glyph_scale, show_c
         # Use DistributedSampler for multi-GPU training
         sampler = DistributedSampler(dataset, num_replicas=world_size, rank=rank, shuffle=False)
         train_loader = DataLoader(dataset=dataset, batch_size=1, shuffle=False, num_workers=0, sampler=sampler, collate_fn=collate_fn)
+
+    invalid_gly_lines = {}
 
     pbar = tqdm(total=show_count if show_count != -1 else len(train_loader))
     for i, data in enumerate(train_loader):
@@ -833,25 +838,21 @@ def run_inference(rank, world_size, json_paths, glyph_paths, glyph_scale, show_c
             cv2.imwrite(os.path.join(show_imgs_dir, f'plots_{img_name}_inv_mask.jpg'), np.array(img)[..., ::-1] * (1 - data['inv_mask'][0].numpy().astype(np.int32)))
 
         else:
+            invalid_gly_lines_curr_image = []
             has_good_quality = False
-            filtered_glyphs = data['all_glyphs_from_segmentation'][0]
-            if filtered_glyphs is None:
-                invalid_gly_lines_curr_image = [{'polygon': [], 'text': ''}]
+            all_glyphs = data['all_glyphs_from_segmentation'][0]
+            if all_glyphs is None:
+                invalid_gly_lines_curr_image.append({'polygon': [], 'text': ''})
             else:
-                filtered_glyphs = data['all_glyphs_from_segmentation'][0].unsqueeze(-1)
-                invalid_gly_lines_curr_image = []
+                filtered_glyphs = torch.zeros(data['glyphs'][0][0].shape[0], data['glyphs'][0][0].shape[1], 1)
 
                 for k in range(len(data['gly_line'])):
                     good_quality = dataset.load_glyline_and_ocr(data['gly_line'][k][0], data['texts'][k][0], data['language'][k], data['glyphs_path'][0])
                     if good_quality:
                         has_good_quality = True
+                        filtered_glyphs += data['glyphs'][k][0]  # Add the glyph to the filtered glyphs
+                        filtered_glyphs[filtered_glyphs > 1] = 1 # Clip the values to 1
                     else:
-                        poor_positions = data['positions'][k][0]
-                        poor_positions = 1 - poor_positions
-
-                        # remove contents in the poor positions
-                        filtered_glyphs[poor_positions < 0.5] = 0
-
                         # If the gly_line is of poor quality, store relevant information
                         invalid_entry = {
                             'polygon': data['polygons'][k].tolist(),  # Store the polygon for this invalid gly_line
@@ -864,24 +865,32 @@ def run_inference(rank, world_size, json_paths, glyph_paths, glyph_scale, show_c
                     # if glyph_scale != 1:
                     #     new_size = (int(filtered_glyphs.shape[1] * glyph_scale), int(filtered_glyphs.shape[0] * glyph_scale))  # (width, height)
                     #     filtered_glyphs = cv2.resize(filtered_glyphs.numpy(), new_size, interpolation=cv2.INTER_AREA) * 255
+                    #
+                    # threshold = torch.mean(filtered_glyphs)
+                    filtered_glyphs[filtered_glyphs >= 0.5] = 1
+                    filtered_glyphs[filtered_glyphs < 0.5] = 0
 
                     saved_file_name = data['glyphs_path'][0].replace('/output/', '/ocr_verified/')
                     # print('saved_file_name', saved_file_name)
                     cv2.imwrite(saved_file_name, filtered_glyphs.numpy() * 255)
 
             if len(invalid_gly_lines_curr_image) > 0:
+                invalid_gly_lines[data['glyphs_path'][0]] = invalid_gly_lines_curr_image
+
+            if i % json_write_freq == 0:
                 # Append the invalid gly_lines for this image to the JSON file
-                append_invalid_gly_lines_to_file(invalid_json_path, data['glyphs_path'][0], invalid_gly_lines_curr_image)
+                append_invalid_gly_lines_to_file(invalid_json_path, invalid_gly_lines)
+                invalid_gly_lines = {}
 
         pbar.update(1)
     pbar.close()
+    cleanup()
 
 
 if __name__ == '__main__':
     '''
     Run this script to show details of your dataset, such as ocr annotations, glyphs, prompts, etc.
     '''
-    from tqdm import tqdm
     from matplotlib import pyplot as plt
     import shutil
 
@@ -906,6 +915,7 @@ if __name__ == '__main__':
     show_count = -1
     glyph_scale = 2
     dataset_percent = 0.0566   # 1.0 use full datasets, 0.0566 use ~200k images for ablation study
+    json_write_freq = 1000
     if os.path.exists(show_imgs_dir):
         shutil.rmtree(show_imgs_dir)
     os.makedirs(show_imgs_dir)
@@ -958,5 +968,4 @@ if __name__ == '__main__':
         with open(invalid_json_path, 'w') as f:
             json.dump({}, f)
 
-    mp.spawn(run_inference, nprocs=world_size, args=(world_size, json_paths, glyph_paths, glyph_scale, show_count, dataset_percent, step, invalid_json_path))
-    cleanup()
+    mp.spawn(run_inference, nprocs=world_size, args=(world_size, json_paths, glyph_paths, glyph_scale, show_count, dataset_percent, step, invalid_json_path, json_write_freq))
