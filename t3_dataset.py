@@ -437,9 +437,9 @@ class T3DataSet(Dataset):
 
         self.step = step
         self.invalid_json_path = invalid_json_path
-        # if self.step == 'training':
-        #     with open(self.invalid_json_path, 'r') as f:
-        #         self.invalid_glyph_lines = json.load(f)
+        if self.step == 'training':
+            with open(self.invalid_json_path, 'r') as f:
+                self.invalid_glyph_lines = json.load(f)
 
         for jp, gp in zip(json_path, glyph_path):
             data_list += self.load_data(jp, gp, percent)
@@ -508,12 +508,12 @@ class T3DataSet(Dataset):
                     # print('glyphs_path', glyphs_path, 'annotation', annotation)
 
                     # filter out low-quality texts and their polygons
-                    # if self.step == 'training' and glyphs_path in self.invalid_glyph_lines:
-                    #     if len(annotation['polygon']) == 0:
-                    #         continue
-                    #     if annotation['polygon'] in self.invalid_glyph_lines[glyphs_path]:
-                    #         invalid_polygons.append(annotation['polygon'])
-                    #         continue
+                    if self.step == 'training' and glyphs_path in self.invalid_glyph_lines:
+                        if len(annotation['polygon']) == 0:
+                            continue
+                        if annotation['polygon'] in self.invalid_glyph_lines[glyphs_path]:
+                            invalid_polygons.append(annotation['polygon'])
+                            continue
 
                     if 'valid' in annotation and annotation['valid'] is False:
                         invalid_polygons.append(annotation['polygon'])

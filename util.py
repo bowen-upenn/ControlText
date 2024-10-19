@@ -41,3 +41,7 @@ def resize_image(img, max_length=768):
     height, width = img.shape[:2]
     img = cv2.resize(img, (width-(width % 64), height-(height % 64)))
     return img
+
+
+def clamp(value, min_val, max_val):
+    return max(min_val, min(value, max_val))

@@ -7,6 +7,7 @@ from pathlib import Path
 import numpy as np
 import cv2
 from tqdm import tqdm
+import util
 
 
 # Configurations for inference
@@ -37,8 +38,7 @@ if __name__ == '__main__':
     dataset = T3DataSet(
         json_paths, glyph_paths, max_lines=5, max_chars=20, caption_pos_prob=0.0,
         mask_pos_prob=1.0, mask_img_prob=mask_ratio, glyph_scale=2,
-        percent=dataset_percent, debug=False, using_dlc=False, wm_thresh=wm_thresh,
-        invalid_json_path=None  # Not needed for inference
+        percent=dataset_percent, debug=False, using_dlc=False, wm_thresh=wm_thresh
     )
 
     # Create a DataLoader for inference
@@ -87,23 +87,48 @@ if __name__ == '__main__':
         decoded_samples = model.decode_first_stage(samples)
 
         # Save the decoded samples as images
-        for i in range(decoded_samples.shape[0]):
+        for i in range(batch_size):
             full_path = Path(text_info['img_path'][i])
             extracted_name = full_path.parent.name + '/' + full_path.name
             save_path = os.path.join('./inference_output', extracted_name)
+            save_path_no_blend = os.path.join('./inference_output_no_blend', extracted_name)
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            os.makedirs(os.path.dirname(save_path_no_blend), exist_ok=True)
 
-            # Only replace the regions within the positions, and keep the masked_x regions
-            print("decoded_samples[i]", decoded_samples[i].shape, "text_info['positions'][i]", text_info['positions'][i].shape,
-                  "text_info['img'][i]", text_info['img'][i].shape, "masked_x[i]", text_info['masked_x'][i].shape)
-            decoded_samples[i] = decoded_samples[i] * text_info['positions'][i] + text_info['img'][i] * (1 - text_info['positions'][i])
+            # Normalize and prepare the decoded sample
+            decoded_sample = decoded_samples[i].float().cpu().numpy().transpose(1, 2, 0)
+            decoded_sample = (decoded_sample - decoded_sample.min()) / (decoded_sample.max() - decoded_sample.min())
+            decoded_sample = (decoded_sample * 255).astype(np.uint8)
+            image = text_info['img'][i].float().cpu().numpy()
+            image = (image - image.min()) / (image.max() - image.min())
+            image = (image * 255).astype(np.uint8)
 
-            decoded_sample = decoded_samples[i]
-            decoded_sample = (decoded_sample - torch.min(decoded_sample)) / (torch.max(decoded_sample) - torch.min(decoded_sample))
-            decoded_sample = decoded_sample.cpu().numpy().transpose(1, 2, 0) * 255
-            cv2.imwrite(save_path, decoded_sample)
+            # Blend each of the masked region
+            for j in range(len(text_info['positions'])):
+                region = text_info['positions'][j][i].cpu().numpy().squeeze(0)
+                region = (region * 255).astype(np.uint8)
+                if torch.max(text_info['glyphs'][j][i]) == 0:
+                    continue
 
-            break
+                # Find the center of the mask for seamless cloning
+                y_indices, x_indices = np.where(region > 0)
+                if len(y_indices) == 0 or len(x_indices) == 0:
+                    # Skip if no valid region is found
+                    continue
+
+                center_x = (x_indices.min() + x_indices.max()) // 2
+                center_y = (y_indices.min() + y_indices.max()) // 2
+                center_x = util.clamp(center_x, 0, image.shape[0] - 1)
+                center_y = util.clamp(center_y, 0, image.shape[1] - 1)
+                center = (center_x, center_y)
+
+                # Perform Poisson blending
+                blended_image = cv2.seamlessClone(decoded_sample, image, region, center, cv2.NORMAL_CLONE)
+                image = blended_image
+
+            # Save the blended result
+            cv2.imwrite(save_path, cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
+            cv2.imwrite(save_path_no_blend, cv2.cvtColor(decoded_sample, cv2.COLOR_RGB2BGR))
 
 
 # from modelscope.pipelines import pipeline
