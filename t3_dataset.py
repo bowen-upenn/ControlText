@@ -9,7 +9,6 @@ from torch.utils.data import Dataset, DataLoader
 from dataset_util import load, show_bbox_on_image
 import time
 import argparse
-from shapely.geometry import Polygon
 import torch
 import torch.nn.functional as F
 import json
@@ -247,7 +246,7 @@ def find_glyph2(img, position, scale=1, add_perturbation=True, max_offset=16):
     # print(np.min(img), np.max(img))
     # print(np.min(position), np.max(position))
     # img[img < 150] = 0.0
-    rows, cols = img.shape
+    rows, cols = position.shape[0], position.shape[1]
 
     position = position.squeeze(-1)
     raw_position = position.copy()
@@ -375,31 +374,6 @@ def order_points(pts):
     rect[1] = pts[np.argmin(diff)]
     rect[3] = pts[np.argmax(diff)]
     return rect
-
-
-def calculate_iou(polygon1, polygon2):
-    """Calculate Intersection over Union (IoU) between two polygons."""
-    poly1 = Polygon(polygon1)
-    poly2 = Polygon(polygon2)
-    if not poly1.is_valid or not poly2.is_valid:
-        return 0
-    intersection = poly1.intersection(poly2).area
-    union = poly1.union(poly2).area
-    return intersection / union
-
-
-def find_nearest_polygon(detected_box, polygons):
-    """Find the polygon from the list of polygons that has the highest IoU with the detected box."""
-    best_iou = 0
-    best_polygon = None
-    best_idx = -1
-    for idx, polygon in enumerate(polygons):
-        iou = calculate_iou(detected_box, polygon)
-        if iou > best_iou:
-            best_iou = iou
-            best_polygon = polygon
-            best_idx = idx
-    return best_polygon, best_idx
 
 
 # Function to append invalid gly_lines for an image to the JSON file
@@ -582,7 +556,7 @@ class T3DataSet(Dataset):
             target = cv2.resize(target, (512, 512))
         target = (target.astype(np.float32) / 127.5) - 1.0
         item_dict['img'] = target
-        # caption
+        item_dict['img_path'] = cur_item['img_path']
         item_dict['caption'] = cur_item['caption']
         item_dict['glyphs'] = []
         item_dict['gly_line'] = []
@@ -659,13 +633,13 @@ class T3DataSet(Dataset):
         item_dict['inv_mask'] = self.draw_inv_mask(invalid_polygons)
         item_dict['hint'] = self.get_hint(item_dict['positions'])
         if random.random() < self.mask_img_prob:
-            # randomly generate 0~3 masks
-            box_num = random.randint(0, 3)
-            boxes = generate_random_rectangles(512, 512, box_num)
-            boxes = np.array(boxes)
+            # # randomly generate 0~3 masks
+            # box_num = random.randint(0, 3)
+            # boxes = generate_random_rectangles(512, 512, box_num)
+            # boxes = np.array(boxes)
             pos_list = item_dict['positions'].copy()
-            for i in range(box_num):
-                pos_list += [self.draw_pos(boxes[i], self.mask_pos_prob)]
+            # for i in range(box_num):
+            #     pos_list += [self.draw_pos(boxes[i], self.mask_pos_prob)]
             mask = self.get_hint(pos_list)
             masked_img = target * (1 - mask)
         else:
@@ -914,7 +888,7 @@ if __name__ == '__main__':
 
     show_count = -1
     glyph_scale = 2
-    dataset_percent = 0.0566   # 1.0 use full datasets, 0.0566 use ~200k images for ablation study
+    dataset_percent = 1.0 #0.0566   # 1.0 use full datasets, 0.0566 use ~200k images for ablation study
     json_write_freq = 1000
     if os.path.exists(show_imgs_dir):
         shutil.rmtree(show_imgs_dir)

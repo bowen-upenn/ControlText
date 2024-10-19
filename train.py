@@ -23,8 +23,8 @@ mask_ratio = 1  # default 0.5, ratio of mask for inpainting(text editing task), 
 wm_thresh = 0.5  # set 0.5 to skip watermark imgs from training(ch:~25%, en:~8%, @Precision93.67%+Recall88.80%), 1.0 not skip
 root_dir = './models'  # path for save checkpoints
 dataset_percent = 1.0  # 1.0 use full datasets, 0.0566 use ~200k images for ablation study
-save_steps = None  # step frequency of saving checkpoints
-save_epochs = 1  # epoch frequency of saving checkpoints
+save_steps = 1000  # step frequency of saving checkpoints
+save_epochs = None  # epoch frequency of saving checkpoints
 max_epochs = 15  # default 60
 assert (save_steps is None) != (save_epochs is None)
 
@@ -50,6 +50,7 @@ if __name__ == '__main__':
         every_n_train_steps=save_steps,
         every_n_epochs=save_epochs,
         save_top_k=-1,
+        save_last=True,
         monitor="global_step",
         mode="max",
     )

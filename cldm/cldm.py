@@ -32,20 +32,15 @@ class ControlledUnetModel(UNetModel):
     def forward(self, x, timesteps=None, context=None, control=None, only_mid_control=False, **kwargs):
         hs = []
         with torch.no_grad():
-            print('test1')
             t_emb = timestep_embedding(timesteps, self.model_channels, repeat_only=False)
-            print('test2')
             if self.use_fp16:
                 t_emb = t_emb.half()
             emb = self.time_embed(t_emb)
-            print('test3')
             h = x.type(self.dtype)
             for module in self.input_blocks:
                 h = module(h, emb, context)
                 hs.append(h)
-            print('test4')
             h = self.middle_block(h, emb, context)
-            print('test5')
 
         if control is not None:
             h += control.pop()
@@ -389,7 +384,7 @@ class ControlLDM(LatentDiffusion):
                     self.embedding_manager.recog = self.cn_recognizer
 
     @torch.no_grad()
-    def get_input(self, batch, k, bs=None, *args, **kwargs):
+    def get_input(self, batch, k=None, bs=None, *args, **kwargs):
         if self.embedding_manager is None:  # fill in full caption
             self.fill_caption(batch)
         x, c, mx = super().get_input(batch, self.first_stage_key, mask_k='masked_img', *args, **kwargs)
@@ -413,6 +408,7 @@ class ControlLDM(LatentDiffusion):
         n_lines = batch['n_lines']
         language = batch['language']
         texts = batch['texts']
+        img_path = batch['img_path']
         assert len(glyphs) == len(positions)
         for i in range(len(glyphs)):
             if bs is not None:
@@ -435,6 +431,7 @@ class ControlLDM(LatentDiffusion):
         info['n_lines'] = n_lines
         info['language'] = language
         info['texts'] = texts
+        info['img_path'] = img_path
         info['img'] = batch['img']  # nhwc, (-1,1)
         info['masked_x'] = mx
         info['gly_line'] = gly_line
