@@ -17,8 +17,8 @@ from t3_dataset import draw_glyph, draw_glyph2
 
 # Configurations for inference
 batch_size = 1  # Can adjust based on available VRAM
-resume_path = './models/anytext_v1.1.ckpt'
-# resume_path = './models-oct-12/lightning_logs/version_0/checkpoints/last.ckpt'  # Path to the trained model checkpoint
+# resume_path = './models/anytext_v1.1.ckpt'
+resume_path = './models-oct-12/lightning_logs/version_0/checkpoints/last.ckpt'  # Path to the trained model checkpoint
 model_config = './models_yaml/anytext_sd15.yaml'  # Model configuration
 mask_ratio = 1  # Inference setting, set 0 to disable masking
 wm_thresh = 0.5  # Watermark threshold (adjust based on the inference dataset)
@@ -33,7 +33,8 @@ def prepare_custom_inputs():
     item_dict["img_path"] = "./show_results/plots_000001710.jpg"
     item_dict["caption"] = "human country jukebox logo"
     item_dict["texts"] = ['JUK', 'EBOX', 'Country', 'HUMAN']
-    fonts = [ImageFont.truetype("./font/Arial_Unicode.ttf", size=60) for _ in range(len(item_dict["texts"]))]
+    font_paths = ["./font/Arial_Unicode.ttf" for _ in range(len(item_dict["texts"]))]
+    fonts = [ImageFont.truetype(font_paths[i], size=60) for i in range(len(item_dict["texts"]))]
     item_dict["language"] = []
     for text in item_dict["texts"]:
         lang, _ = langid.classify(text)

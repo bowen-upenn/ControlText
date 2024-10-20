@@ -570,15 +570,17 @@ class T3DataSet(Dataset):
             save_path = item_dict['img_path'].replace(".jpg", "_before.jpg")
             save_path = os.path.join('./inference_output', save_path)
             cv2.imwrite(save_path, cv2.cvtColor(original_image.astype(np.uint8), cv2.COLOR_RGB2BGR))
-            item_dict['img'] = (original_image.astype(np.float32) / 127.5) - 1.0
 
             mask = self.get_hint(item_dict['positions'])
             masked_img = original_image * (1 - mask)
-            item_dict['masked_img'] = masked_img
-
             save_path = item_dict['img_path'].replace(".jpg", "_masked.jpg")
             save_path = os.path.join('./inference_output', save_path)
             cv2.imwrite(save_path, cv2.cvtColor(masked_img.astype(np.uint8), cv2.COLOR_RGB2BGR))
+
+            original_image = (original_image.astype(np.float32) / 127.5) - 1.0
+            item_dict['img'] = original_image
+            masked_img = (masked_img.astype(np.float32) / 127.5) - 1.0
+            item_dict['masked_img'] = masked_img
 
             invalid_polygons = []
             item_dict['inv_mask'] = self.draw_inv_mask(invalid_polygons)
@@ -840,7 +842,7 @@ def run_inference(rank, world_size, json_paths, glyph_paths, glyph_scale, show_c
             cv2.imwrite(os.path.join(show_imgs_dir, f'plots_{img_name}_masked.jpg'), masked_img)
             if 'texts' in data and len(data['texts']) > 0:
                 texts = [x[0] for x in data['texts']]
-                img = show_bbox_on_image(Image.fromarray(img), data['polygons'], texts)
+            #     img = show_bbox_on_image(Image.fromarray(img), data['polygons'], texts)
             cv2.imwrite(os.path.join(show_imgs_dir, f'plots_{img_name}.jpg'), np.array(img)[..., ::-1])
             with open(os.path.join(show_imgs_dir, f'plots_{img_name}.txt'), 'w') as fin:
                 fin.writelines([data['caption'][0]])
