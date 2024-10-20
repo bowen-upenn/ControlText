@@ -45,3 +45,21 @@ def resize_image(img, max_length=768):
 
 def clamp(value, min_val, max_val):
     return max(min_val, min(value, max_val))
+
+
+def update_font_filename():
+    directory = "./fonts"
+    for filename in os.listdir(directory):
+        # Check if there are spaces in the filename
+        if " " in filename:
+            # Construct the new filename by replacing spaces with underscores
+            new_filename = filename.replace(" ", "_")
+
+            # Get the full path of the old and new filenames
+            old_file = os.path.join(directory, filename)
+            new_file = os.path.join(directory, new_filename)
+
+            # Rename the file
+            os.rename(old_file, new_file)
+            print(f"Renamed: '{filename}' to '{new_filename}'")
+# update_font_filename()

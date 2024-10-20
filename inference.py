@@ -33,7 +33,8 @@ def prepare_custom_inputs():
     item_dict["img_path"] = "./show_results/plots_000001710.jpg"
     item_dict["caption"] = "human country jukebox logo"
     item_dict["texts"] = ['JUK', 'EBOX', 'Country', 'HUMAN']
-    font_paths = ["./font/Arial_Unicode.ttf" for _ in range(len(item_dict["texts"]))]
+    # font_paths = ["./fonts/Arial_Unicode.ttf" for _ in range(len(item_dict["texts"]))]
+    font_paths = ["./fonts/Courier_New_Italic.ttf" for _ in range(len(item_dict["texts"]))]
     fonts = [ImageFont.truetype(font_paths[i], size=60) for i in range(len(item_dict["texts"]))]
     item_dict["language"] = []
     for text in item_dict["texts"]:
@@ -84,7 +85,7 @@ def inference(model, dataloader):
     print('Starting inference...')
 
     # Define some constants for sampling
-    ddim_steps = 20  # Number of steps in DDIM sampling
+    ddim_steps = 50  # Number of steps in DDIM sampling
     ddim_eta = 0.0  # Sampling noise eta
 
     for batch in tqdm(dataloader):

@@ -401,7 +401,7 @@ class T3DataSet(Dataset):
             max_lines=5,
             max_chars=20,
             place_holder='*',
-            font_path='./font/Arial_Unicode.ttf',
+            font_path='./fonts/Arial_Unicode.ttf',
             caption_pos_prob=1.0,
             mask_pos_prob=1.0,
             mask_img_prob=0.5,
