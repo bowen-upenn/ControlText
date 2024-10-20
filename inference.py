@@ -7,50 +7,84 @@ from pathlib import Path
 import numpy as np
 import cv2
 from tqdm import tqdm
+import langid
+import argparse
+from PIL import Image, ImageFont
+
 import util
+from t3_dataset import draw_glyph, draw_glyph2
 
 
 # Configurations for inference
-batch_size = 6  # Can adjust based on available VRAM
-resume_path = './models-oct-12/lightning_logs/version_0/checkpoints/last.ckpt'  # Path to the trained model checkpoint
+batch_size = 1  # Can adjust based on available VRAM
+resume_path = './models/anytext_v1.1.ckpt'
+# resume_path = './models-oct-12/lightning_logs/version_0/checkpoints/last.ckpt'  # Path to the trained model checkpoint
 model_config = './models_yaml/anytext_sd15.yaml'  # Model configuration
 mask_ratio = 1  # Inference setting, set 0 to disable masking
 wm_thresh = 0.5  # Watermark threshold (adjust based on the inference dataset)
 dataset_percent = 1.0  # Use the full dataset for inference
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+single_custom_image = True # Set to True to process a single custom image
 
-if __name__ == '__main__':
-    # Load the pre-trained model
-    model = create_model(model_config)  # Load model configuration
-    model.load_state_dict(load_state_dict(resume_path))  # Load trained weights
-    model = model.to(device)
-    model.eval()  # Set model to evaluation mode
 
-    # Define paths to data
-    json_paths = [
-        r'/tmp/datasets/AnyWord-3M/link_download/laion/test_data_v1.1.json',
-    ]
-    glyph_paths = [
-        r'./Rethinking-Text-Segmentation/log/images/ocr_verified/laion_test',
-    ]
+def prepare_custom_inputs():
+    # This is a test case
+    item_dict = {}
+    item_dict["img_path"] = "./show_results/plots_000001710.jpg"
+    item_dict["caption"] = "human country jukebox logo"
+    item_dict["texts"] = ['JUK', 'EBOX', 'Country', 'HUMAN']
+    fonts = [ImageFont.truetype("./font/Arial_Unicode.ttf", size=60) for _ in range(len(item_dict["texts"]))]
+    item_dict["language"] = []
+    for text in item_dict["texts"]:
+        lang, _ = langid.classify(text)
+        item_dict["language"].append(lang)
 
-    # Load the dataset for inference
-    dataset = T3DataSet(
-        json_paths, glyph_paths, max_lines=5, max_chars=20, caption_pos_prob=0.0,
-        mask_pos_prob=1.0, mask_img_prob=mask_ratio, glyph_scale=2,
-        percent=dataset_percent, debug=False, using_dlc=False, wm_thresh=wm_thresh
-    )
+    item_dict["polygons"] = [np.array([[[102, 397],
+                                        [235, 366],
+                                        [240, 393],
+                                        [107, 424]]]),
+                             np.array([[[231, 392],
+                                        [235, 363],
+                                        [405, 392],
+                                        [401, 421]]]),
+                             np.array([[[ 61, 352],
+                                        [ 73, 219],
+                                        [446, 259],
+                                        [434, 393]]]),
+                             np.array([[[118, 185],
+                                        [396, 175],
+                                        [398, 250],
+                                        [120, 261]]])]
 
-    # Create a DataLoader for inference
-    dataloader = DataLoader(dataset, num_workers=8, persistent_workers=True, batch_size=batch_size, shuffle=False)
+    all_glyphs = np.zeros((1024, 1024))
+    item_dict["glyphs"] = []
+    item_dict["gly_line"] = []
+    glyph_scale = 2
 
+    for idx, (text, font) in enumerate(zip(item_dict["texts"], fonts)):
+        gly_line = draw_glyph(font, text)
+        item_dict["gly_line"] += [gly_line]
+        glyphs = draw_glyph2(font, text, item_dict["polygons"][idx], scale=glyph_scale)
+        item_dict["glyphs"] += [glyphs]
+        all_glyphs += glyphs.squeeze(-1)
+
+    all_glyphs[all_glyphs > 0] = 1
+    all_glyphs = all_glyphs.astype(np.bool).astype(np.uint8) * 255
+
+    save_path = item_dict['img_path'].replace(".jpg", "_allglyphs.jpg")
+    save_path = os.path.join('./inference_output', save_path)
+    cv2.imwrite(save_path, all_glyphs)
+
+    return item_dict
+
+
+def inference(model, dataloader):
     # Inference loop
     print('Starting inference...')
 
     # Define some constants for sampling
     ddim_steps = 20  # Number of steps in DDIM sampling
     ddim_eta = 0.0  # Sampling noise eta
-    unconditional_guidance_scale = 9.0  # Guidance scale
 
     for batch in tqdm(dataloader):
         # Prepare inputs using get_input (z, cond, etc.)
@@ -129,6 +163,55 @@ if __name__ == '__main__':
             # Save the blended result
             cv2.imwrite(save_path, cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
             cv2.imwrite(save_path_no_blend, cv2.cvtColor(decoded_sample, cv2.COLOR_RGB2BGR))
+
+        break
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Command line arguments')
+    parser.add_argument('--option', type=str, default="single", help='single or dataset')
+    cmd_args = parser.parse_args()
+    single_custom_image = True if cmd_args.option == "single" else False
+
+    # Load the pre-trained model
+    model = create_model(model_config)  # Load model configuration
+    model.load_state_dict(load_state_dict(resume_path))  # Load trained weights
+    model = model.to(device)
+    model.eval()  # Set model to evaluation mode
+
+    if single_custom_image:
+        world_size = torch.cuda.device_count()
+        assert world_size == 1
+
+        item_dict = prepare_custom_inputs()
+        batch_size = 1
+        dataset = T3DataSet(
+            item_dict["img_path"], max_lines=5, max_chars=20, caption_pos_prob=0.0,
+            mask_pos_prob=1.0, mask_img_prob=mask_ratio, glyph_scale=2,
+            percent=dataset_percent, debug=False, using_dlc=False, wm_thresh=wm_thresh,
+            single_custom_image=True, custom_inputs=item_dict
+        )
+    else:
+        # Define paths to data
+        json_paths = [
+            r'/tmp/datasets/AnyWord-3M/link_download/laion/test_data_v1.1.json',
+        ]
+        glyph_paths = [
+            r'./Rethinking-Text-Segmentation/log/images/ocr_verified/laion_test',
+        ]
+
+        # Load the dataset for inference
+        dataset = T3DataSet(
+            json_paths, glyph_paths, max_lines=5, max_chars=20, caption_pos_prob=0.0,
+            mask_pos_prob=1.0, mask_img_prob=mask_ratio, glyph_scale=2,
+            percent=dataset_percent, debug=False, using_dlc=False, wm_thresh=wm_thresh
+        )
+
+    # Create a DataLoader for inference
+    dataloader = DataLoader(dataset, num_workers=8, persistent_workers=True, batch_size=batch_size, shuffle=False)
+
+    # Run inference
+    inference(model, dataloader)
+
 
 
 # from modelscope.pipelines import pipeline

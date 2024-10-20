@@ -25,7 +25,7 @@ from filelock import FileLock
 # Initialize distributed process group for multiple GPUs
 def setup(rank, world_size):
     os.environ['MASTER_ADDR'] = 'localhost'
-    os.environ['MASTER_PORT'] = '12356'
+    os.environ['MASTER_PORT'] = '12355'
     dist.init_process_group("gloo", rank=rank, world_size=world_size)
 
 
@@ -397,7 +397,7 @@ class T3DataSet(Dataset):
     def __init__(
             self,
             json_path,
-            glyph_path,
+            glyph_path=None,
             max_lines=5,
             max_chars=20,
             place_holder='*',
@@ -413,14 +413,17 @@ class T3DataSet(Dataset):
             wm_thresh=1.0,
             step='training',
             invalid_json_path='./Rethinking-Text-Segmentation/log/images/ocr_verified/invalid_gly_lines.json',
+            single_custom_image=False,
+            custom_inputs=None,
     ):
         assert isinstance(json_path, (str, list))
         if isinstance(json_path, str):
             json_path = [json_path]
-        assert isinstance(glyph_path, (str, list))
-        if isinstance(glyph_path, str):
-            glyph_path = [glyph_path]
-        assert len(json_path) == len(glyph_path)
+        if glyph_path is not None:
+            assert isinstance(glyph_path, (str, list))
+            if isinstance(glyph_path, str):
+                glyph_path = [glyph_path]
+            assert len(json_path) == len(glyph_path)
 
         data_list = []
         self.using_dlc = using_dlc
@@ -436,15 +439,23 @@ class T3DataSet(Dataset):
         self.wm_thresh = wm_thresh
 
         self.step = step
+        self.single_custom_image = single_custom_image
+        self.custom_inputs = custom_inputs
+
         self.invalid_json_path = invalid_json_path
-        if self.step == 'training':
+        if self.step == 'training' and not self.single_custom_image:
             with open(self.invalid_json_path, 'r') as f:
                 self.invalid_glyph_lines = json.load(f)
 
-        for jp, gp in zip(json_path, glyph_path):
-            data_list += self.load_data(jp, gp, percent)
-        self.data_list = data_list
-        print(f'All dataset loaded, imgs={len(self.data_list)}')
+        if self.single_custom_image:
+            assert glyph_path is None and len(json_path) == 1 and custom_inputs is not None
+            self.data_list = json_path
+            print(f'Image loaded {json_path}')
+        else:
+            for jp, gp in zip(json_path, glyph_path):
+                data_list += self.load_data(jp, gp, percent)
+            self.data_list = data_list
+            print(f'All dataset loaded, imgs={len(self.data_list)}')
 
         self.debug = debug
         if self.debug:
@@ -545,122 +556,155 @@ class T3DataSet(Dataset):
 
 
     def __getitem__(self, item):
-        item_dict = {}
-        if self.debug:  # sample fixed items
-            item = self.tmp_items.pop()
-            print(f'item = {item}')
         cur_item = self.data_list[item]
-        # img
-        target = np.array(Image.open(cur_item['img_path']).convert('RGB'))
-        if target.shape[0] != 512 or target.shape[1] != 512:
-            target = cv2.resize(target, (512, 512))
-        target = (target.astype(np.float32) / 127.5) - 1.0
-        item_dict['img'] = target
-        item_dict['img_path'] = cur_item['img_path']
-        item_dict['caption'] = cur_item['caption']
-        item_dict['glyphs'] = []
-        item_dict['gly_line'] = []
-        item_dict['positions'] = []
-        item_dict['texts'] = []
-        item_dict['language'] = []
-        item_dict['inv_mask'] = []
-        item_dict['all_glyphs_from_segmentation'] = None
-        item_dict['polygons'] = None
-        texts = cur_item.get('texts', [])
-        if len(texts) > 0:
-            idxs = [i for i in range(len(texts))]
-            if len(texts) > self.max_lines:
-                sel_idxs = random.sample(idxs, self.max_lines)
-                unsel_idxs = [i for i in idxs if i not in sel_idxs]
-            else:
-                sel_idxs = idxs
-                unsel_idxs = []
-            if len(cur_item['pos']) > 0:
-                pos_idxs = [cur_item['pos'][i] for i in sel_idxs]
-            else:
-                pos_idxs = [-1 for i in sel_idxs]
 
-            item_dict['polygons'] = [cur_item['polygons'][i] for i in sel_idxs]
-            item_dict['caption'] = get_caption_pos(item_dict['caption'], pos_idxs, self.caption_pos_porb, self.place_holder)
-            item_dict['texts'] = [cur_item['texts'][i][:self.max_chars] for i in sel_idxs]
-            item_dict['language'] = [cur_item['language'][i] for i in sel_idxs]
+        if self.single_custom_image:
+            item_dict = self.custom_inputs
 
-            # mask_pos
+            item_dict['positions'] = []
             for polygon in item_dict['polygons']:
                 item_dict['positions'] += [self.draw_pos(polygon, self.mask_pos_prob)]
+            item_dict['hint'] = self.get_hint(item_dict['positions'])
 
-            # glyphs
-            all_glyphs_from_segmentation = load_all_glyphs(cur_item['glyphs_path'])
-            item_dict['all_glyphs_from_segmentation'] = all_glyphs_from_segmentation
-            item_dict['glyphs_path'] = cur_item['glyphs_path']
+            original_image = np.array(Image.open(item_dict['img_path']).convert('RGB'))
+            save_path = item_dict['img_path'].replace(".jpg", "_before.jpg")
+            save_path = os.path.join('./inference_output', save_path)
+            cv2.imwrite(save_path, cv2.cvtColor(original_image.astype(np.uint8), cv2.COLOR_RGB2BGR))
+            item_dict['img'] = (original_image.astype(np.float32) / 127.5) - 1.0
 
-            if all_glyphs_from_segmentation is not None:
-                for idx, text in enumerate(item_dict['texts']):
-                    glyphs, glyphs_raw, position = find_glyph2(all_glyphs_from_segmentation, item_dict['positions'][idx], scale=self.glyph_scale, add_perturbation=self.step=='training')
-                    if glyphs_raw is not None:
-                        gly_line, aspect_ratio = find_glyph(glyphs_raw, item_dict['polygons'][idx], scale=self.glyph_scale)
-                        item_dict['positions'][idx] = position
-                    else:
-                        gly_line, aspect_ratio = find_glyph(glyphs, item_dict['polygons'][idx], scale=self.glyph_scale)
+            mask = self.get_hint(item_dict['positions'])
+            masked_img = original_image * (1 - mask)
+            item_dict['masked_img'] = masked_img
 
-                    item_dict['glyphs'] += [glyphs]
-                    item_dict['gly_line'] += [gly_line]
+            save_path = item_dict['img_path'].replace(".jpg", "_masked.jpg")
+            save_path = os.path.join('./inference_output', save_path)
+            cv2.imwrite(save_path, cv2.cvtColor(masked_img.astype(np.uint8), cv2.COLOR_RGB2BGR))
 
-                    if aspect_ratio == 0:
-                        print('Zero box height')
-                        # self.num_invalid_glyph_line += 1
-                    # self.num_total_glyph_lines += 1
-            else:
-                # just in case if a sample has no pre-processed glyph image
-                # self.num_missing_glyphs += 1
-                print('Missing glyph images')
-                for idx, text in enumerate(item_dict['texts']):
-                    gly_line = draw_glyph(self.font, text)
-                    glyphs = draw_glyph2(self.font, text, item_dict['polygons'][idx], scale=self.glyph_scale)
-                    item_dict['glyphs'] += [glyphs]
-                    item_dict['gly_line'] += [gly_line]
-            # # glyphs
-            # for idx, text in enumerate(item_dict['texts']):
-            #     gly_line = draw_glyph(self.font, text)
-            #     glyphs = draw_glyph2(self.font, text, item_dict['polygons'][idx], scale=self.glyph_scale)
-            #     item_dict['glyphs'] += [glyphs]
-            #     item_dict['gly_line'] += [gly_line]
+            invalid_polygons = []
+            item_dict['inv_mask'] = self.draw_inv_mask(invalid_polygons)
 
-        # inv_mask
-        invalid_polygons = cur_item['invalid_polygons'] if 'invalid_polygons' in cur_item else []
-        if len(texts) > 0:
-            invalid_polygons += [cur_item['polygons'][i] for i in unsel_idxs]
-        item_dict['inv_mask'] = self.draw_inv_mask(invalid_polygons)
-        item_dict['hint'] = self.get_hint(item_dict['positions'])
-        if random.random() < self.mask_img_prob:
-            # # randomly generate 0~3 masks
-            # box_num = random.randint(0, 3)
-            # boxes = generate_random_rectangles(512, 512, box_num)
-            # boxes = np.array(boxes)
-            pos_list = item_dict['positions'].copy()
-            # for i in range(box_num):
-            #     pos_list += [self.draw_pos(boxes[i], self.mask_pos_prob)]
-            mask = self.get_hint(pos_list)
-            masked_img = target * (1 - mask)
+            # padding
+            n_lines = min(len(item_dict["texts"]), self.max_lines)
+            item_dict['n_lines'] = n_lines
+            n_pad = self.max_lines - n_lines
+            if n_pad > 0:
+                item_dict['glyphs'] += [np.zeros((512 * self.glyph_scale, 512 * self.glyph_scale, 1))] * n_pad
+                item_dict['gly_line'] += [np.zeros((80, 512, 1))] * n_pad
+                item_dict['positions'] += [np.zeros((512, 512, 1))] * n_pad
+                item_dict['texts'] += [' '] * n_pad
+                item_dict['language'] += [' '] * n_pad
+
         else:
-            masked_img = np.zeros_like(target)
-        item_dict['masked_img'] = masked_img
+            item_dict = {}
+            if self.debug:  # sample fixed items
+                item = self.tmp_items.pop()
+                print(f'item = {item}')
+                
+            # img
+            target = np.array(Image.open(cur_item['img_path']).convert('RGB'))
+            if target.shape[0] != 512 or target.shape[1] != 512:
+                target = cv2.resize(target, (512, 512))
+            target = (target.astype(np.float32) / 127.5) - 1.0
+            item_dict['img'] = target
+            item_dict['img_path'] = cur_item['img_path']
+            item_dict['caption'] = cur_item['caption']
+            item_dict['glyphs'] = []
+            item_dict['gly_line'] = []
+            item_dict['positions'] = []
+            item_dict['texts'] = []
+            item_dict['language'] = []
+            item_dict['inv_mask'] = []
+            item_dict['all_glyphs_from_segmentation'] = None
+            item_dict['polygons'] = None
+            texts = cur_item.get('texts', [])
+            if len(texts) > 0:
+                idxs = [i for i in range(len(texts))]
+                if len(texts) > self.max_lines:
+                    sel_idxs = random.sample(idxs, self.max_lines)
+                    unsel_idxs = [i for i in idxs if i not in sel_idxs]
+                else:
+                    sel_idxs = idxs
+                    unsel_idxs = []
+                if len(cur_item['pos']) > 0:
+                    pos_idxs = [cur_item['pos'][i] for i in sel_idxs]
+                else:
+                    pos_idxs = [-1 for i in sel_idxs]
 
-        if self.for_show:
-            item_dict['img_name'] = os.path.split(cur_item['img_path'])[-1]
-            return item_dict
-        if len(texts) > 0:
-            del item_dict['polygons']
-        # padding
-        n_lines = min(len(texts), self.max_lines)
-        item_dict['n_lines'] = n_lines
-        n_pad = self.max_lines - n_lines
-        if n_pad > 0:
-            item_dict['glyphs'] += [np.zeros((512 * self.glyph_scale, 512 * self.glyph_scale, 1))] * n_pad
-            item_dict['gly_line'] += [np.zeros((80, 512, 1))] * n_pad
-            item_dict['positions'] += [np.zeros((512, 512, 1))] * n_pad
-            item_dict['texts'] += [' '] * n_pad
-            item_dict['language'] += [' '] * n_pad
+                item_dict['polygons'] = [cur_item['polygons'][i] for i in sel_idxs]
+                item_dict['caption'] = get_caption_pos(item_dict['caption'], pos_idxs, self.caption_pos_porb, self.place_holder)
+                item_dict['texts'] = [cur_item['texts'][i][:self.max_chars] for i in sel_idxs]
+                item_dict['language'] = [cur_item['language'][i] for i in sel_idxs]
+
+                # mask_pos
+                for polygon in item_dict['polygons']:
+                    item_dict['positions'] += [self.draw_pos(polygon, self.mask_pos_prob)]
+
+                # glyphs
+                all_glyphs_from_segmentation = load_all_glyphs(cur_item['glyphs_path'])
+                item_dict['all_glyphs_from_segmentation'] = all_glyphs_from_segmentation
+                item_dict['glyphs_path'] = cur_item['glyphs_path']
+
+                if all_glyphs_from_segmentation is not None:
+                    for idx, text in enumerate(item_dict['texts']):
+                        glyphs, glyphs_raw, position = find_glyph2(all_glyphs_from_segmentation, item_dict['positions'][idx], scale=self.glyph_scale, add_perturbation=self.step=='training')
+                        if glyphs_raw is not None:
+                            gly_line, aspect_ratio = find_glyph(glyphs_raw, item_dict['polygons'][idx], scale=self.glyph_scale)
+                            item_dict['positions'][idx] = position
+                        else:
+                            gly_line, aspect_ratio = find_glyph(glyphs, item_dict['polygons'][idx], scale=self.glyph_scale)
+
+                        item_dict['glyphs'] += [glyphs]
+                        item_dict['gly_line'] += [gly_line]
+
+                        if aspect_ratio == 0:
+                            print('Zero box height')
+                            # self.num_invalid_glyph_line += 1
+                        # self.num_total_glyph_lines += 1
+                else:
+                    # just in case if a sample has no pre-processed glyph image
+                    # self.num_missing_glyphs += 1
+                    print('Missing glyph images')
+                    for idx, text in enumerate(item_dict['texts']):
+                        gly_line = draw_glyph(self.font, text)
+                        glyphs = draw_glyph2(self.font, text, item_dict['polygons'][idx], scale=self.glyph_scale)
+                        item_dict['glyphs'] += [glyphs]
+                        item_dict['gly_line'] += [gly_line]
+                # # Old version in AnyText
+                # for idx, text in enumerate(item_dict['texts']):
+                #     gly_line = draw_glyph(self.font, text)
+                #     glyphs = draw_glyph2(self.font, text, item_dict['polygons'][idx], scale=self.glyph_scale)
+                #     item_dict['glyphs'] += [glyphs]
+                #     item_dict['gly_line'] += [gly_line]
+
+            # inv_mask
+            invalid_polygons = cur_item['invalid_polygons'] if 'invalid_polygons' in cur_item else []
+            if len(texts) > 0:
+                invalid_polygons += [cur_item['polygons'][i] for i in unsel_idxs]
+            item_dict['inv_mask'] = self.draw_inv_mask(invalid_polygons)
+            item_dict['hint'] = self.get_hint(item_dict['positions'])
+            if random.random() < self.mask_img_prob:
+                pos_list = item_dict['positions'].copy()
+                mask = self.get_hint(pos_list)
+                masked_img = target * (1 - mask)
+            else:
+                masked_img = np.zeros_like(target)
+            item_dict['masked_img'] = masked_img
+
+            if self.for_show:
+                item_dict['img_name'] = os.path.split(cur_item['img_path'])[-1]
+                return item_dict
+            if len(texts) > 0:
+                del item_dict['polygons']
+            # padding
+            n_lines = min(len(texts), self.max_lines)
+            item_dict['n_lines'] = n_lines
+            n_pad = self.max_lines - n_lines
+            if n_pad > 0:
+                item_dict['glyphs'] += [np.zeros((512 * self.glyph_scale, 512 * self.glyph_scale, 1))] * n_pad
+                item_dict['gly_line'] += [np.zeros((80, 512, 1))] * n_pad
+                item_dict['positions'] += [np.zeros((512, 512, 1))] * n_pad
+                item_dict['texts'] += [' '] * n_pad
+                item_dict['language'] += [' '] * n_pad
 
         return item_dict
 
@@ -765,7 +809,7 @@ class T3DataSet(Dataset):
         return np.sum(positions, axis=0).clip(0, 1)
 
 
-def run_inference(rank, world_size, json_paths, glyph_paths, glyph_scale, show_count, dataset_percent, step, invalid_json_path, json_write_freq):
+def run_inference(rank, world_size, json_paths, glyph_paths, glyph_scale, show_count, dataset_percent, step, invalid_json_path, json_write_freq, show_imgs_dir):
     # Setup distributed environment
     setup(rank, world_size)
 
@@ -791,6 +835,8 @@ def run_inference(rank, world_size, json_paths, glyph_paths, glyph_scale, show_c
             img = ((data['img'][0].numpy() + 1.0) / 2.0 * 255).astype(np.uint8)
             masked_img = ((data['masked_img'][0].numpy() + 1.0) / 2.0 * 255)[..., ::-1].astype(np.uint8)
             img_name = data['img_name'][0][:-4]
+            polygons = data['polygons']
+            texts = data['texts'][0]
             cv2.imwrite(os.path.join(show_imgs_dir, f'plots_{img_name}_masked.jpg'), masked_img)
             if 'texts' in data and len(data['texts']) > 0:
                 texts = [x[0] for x in data['texts']]
@@ -810,6 +856,9 @@ def run_inference(rank, world_size, json_paths, glyph_paths, glyph_scale, show_c
                     cv2.imwrite(os.path.join(show_imgs_dir, f'plots_{img_name}_pos_{k}.jpg'), position[0].numpy().astype(np.int32) * 255)
             cv2.imwrite(os.path.join(show_imgs_dir, f'plots_{img_name}_hint.jpg'), data['hint'][0].numpy().astype(np.int32) * 255)
             cv2.imwrite(os.path.join(show_imgs_dir, f'plots_{img_name}_inv_mask.jpg'), np.array(img)[..., ::-1] * (1 - data['inv_mask'][0].numpy().astype(np.int32)))
+
+            if img_name == '000001710':
+                print('img_name', img_name, 'texts', texts, 'polygons', polygons)
 
         else:
             invalid_gly_lines_curr_image = []
@@ -942,4 +991,4 @@ if __name__ == '__main__':
         with open(invalid_json_path, 'w') as f:
             json.dump({}, f)
 
-    mp.spawn(run_inference, nprocs=world_size, args=(world_size, json_paths, glyph_paths, glyph_scale, show_count, dataset_percent, step, invalid_json_path, json_write_freq))
+    mp.spawn(run_inference, nprocs=world_size, args=(world_size, json_paths, glyph_paths, glyph_scale, show_count, dataset_percent, step, invalid_json_path, json_write_freq, show_imgs_dir))
