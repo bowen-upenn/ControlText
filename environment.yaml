@@ -1,4 +1,4 @@
-name: ppocr
+name: controltext
 channels:
   - pytorch
   - defaults

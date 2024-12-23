@@ -14,7 +14,6 @@ from ocr_recog.RecModel import RecModel
 import torch
 import torch.nn.functional as F
 from skimage.transform._geometric import _umeyama as get_sym_mat
-from tqdm import tqdm
 
 
 def min_bounding_rect(img):
@@ -173,7 +172,8 @@ class TextRecognizer(object):
         batch_num = self.rec_batch_num
         preds_all = [None] * img_num
         preds_neck_all = [None] * img_num
-        for beg_img_no in tqdm(range(0, img_num, batch_num)):
+        # for beg_img_no in tqdm(range(0, img_num, batch_num)):
+        for beg_img_no in range(0, img_num, batch_num):
             end_img_no = min(img_num, beg_img_no + batch_num)
             norm_img_batch = []
 
@@ -296,7 +296,8 @@ def main():
         if gt_text is not None:
             weight = np.ones(len(gt_text))
             loss = text_recognizer.get_ctcloss(preds, gt_text, weight)
-        for i in tqdm(range(len(valid_image_file_list))):
+        # for i in tqdm(range(len(valid_image_file_list))):
+        for i in range(len(valid_image_file_list)):
             pred = preds_all[i]
             order, idx = text_recognizer.decode(pred)
             text = text_recognizer.get_text(order)

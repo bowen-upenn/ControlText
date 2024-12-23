@@ -859,8 +859,8 @@ def run_inference(rank, world_size, json_paths, glyph_paths, glyph_scale, show_c
             cv2.imwrite(os.path.join(show_imgs_dir, f'plots_{img_name}_hint.jpg'), data['hint'][0].numpy().astype(np.int32) * 255)
             cv2.imwrite(os.path.join(show_imgs_dir, f'plots_{img_name}_inv_mask.jpg'), np.array(img)[..., ::-1] * (1 - data['inv_mask'][0].numpy().astype(np.int32)))
 
-            if img_name == '000001710':
-                print('img_name', img_name, 'texts', texts, 'polygons', polygons)
+            # if img_name == '000003352':
+            #     print('img_name:', img_name, '; caption:', data['caption'][0], '; texts:', texts, '; polygons:', polygons)
 
         else:
             invalid_gly_lines_curr_image = []
@@ -941,9 +941,9 @@ if __name__ == '__main__':
     glyph_scale = 2
     dataset_percent = 1.0 #0.0566   # 1.0 use full datasets, 0.0566 use ~200k images for ablation study
     json_write_freq = 1000
-    if os.path.exists(show_imgs_dir):
-        shutil.rmtree(show_imgs_dir)
-    os.makedirs(show_imgs_dir)
+    # if os.path.exists(show_imgs_dir):
+    #     shutil.rmtree(show_imgs_dir)
+    # os.makedirs(show_imgs_dir)
     plt.rcParams['axes.unicode_minus'] = False
 
     if step == 'show_results':
@@ -951,7 +951,7 @@ if __name__ == '__main__':
             r'/tmp/datasets/AnyWord-3M/link_download/laion/test_data_v1.1.json',
         ]
         glyph_paths = [
-            r'./Rethinking-Text-Segmentation/log/images/output/laion_test',
+            r'./Rethinking-Text-Segmentation/log/images/ocr_verified/laion_test',
         ]
     else:
         json_paths = [

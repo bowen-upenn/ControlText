@@ -17,8 +17,8 @@ from t3_dataset import draw_glyph, draw_glyph2
 
 # Configurations for inference
 batch_size = 1  # Can adjust based on available VRAM
-# resume_path = './models/anytext_v1.1.ckpt'
-resume_path = './models-oct-12/lightning_logs/version_0/checkpoints/last.ckpt'  # Path to the trained model checkpoint
+resume_path = './models/lightning_logs/version_2/checkpoints/last.ckpt'  # './models/anytext_v1.1.ckpt'
+# resume_path = './models-oct-12/lightning_logs/version_0/checkpoints/last.ckpt'  # Path to the trained model checkpoint
 model_config = './models_yaml/anytext_sd15.yaml'  # Model configuration
 mask_ratio = 1  # Inference setting, set 0 to disable masking
 wm_thresh = 0.5  # Watermark threshold (adjust based on the inference dataset)
@@ -31,10 +31,9 @@ def prepare_custom_inputs():
     # This is a test case
     item_dict = {}
     item_dict["img_path"] = "./show_results/plots_000001710.jpg"
-    item_dict["caption"] = "human country jukebox logo"
+    item_dict["caption"] = "human country jukebox logo on a clean background"
     item_dict["texts"] = ['JUK', 'EBOX', 'Country', 'HUMAN']
-    # font_paths = ["./fonts/Arial_Unicode.ttf" for _ in range(len(item_dict["texts"]))]
-    font_paths = ["./fonts/Courier_New_Italic.ttf" for _ in range(len(item_dict["texts"]))]
+    font_paths = ["./fonts/BigCaslon.ttf" for _ in range(len(item_dict["texts"]))]
     fonts = [ImageFont.truetype(font_paths[i], size=60) for i in range(len(item_dict["texts"]))]
     item_dict["language"] = []
     for text in item_dict["texts"]:
@@ -85,7 +84,7 @@ def inference(model, dataloader):
     print('Starting inference...')
 
     # Define some constants for sampling
-    ddim_steps = 50  # Number of steps in DDIM sampling
+    ddim_steps = 200  # Number of steps in DDIM sampling
     ddim_eta = 0.0  # Sampling noise eta
 
     for batch in tqdm(dataloader):
@@ -213,45 +212,3 @@ if __name__ == '__main__':
 
     # Run inference
     inference(model, dataloader)
-
-
-
-# from modelscope.pipelines import pipeline
-# from util import save_images
-#
-# pipe = pipeline('my-anytext-task', model='/models-oct-12/lightning_logs/version_0/checkpoints/last.ckpt', model_revision='v1.1.3')
-# img_save_folder = "SaveImages"
-# params = {
-#     "show_debug": True,
-#     "image_count": 2,
-#     "ddim_steps": 20,
-# }
-#
-# # 1. text generation
-# mode = 'text-generation'
-# input_data = {
-#     "prompt": 'photo of caramel macchiato coffee on the table, top-down perspective, with "Any" "Text" written on it using cream',
-#     "seed": 66273235,
-#     "draw_pos": 'example_images/gen9.png'
-# }
-# results, rtn_code, rtn_warning, debug_info = pipe(input_data, mode=mode, **params)
-# if rtn_code >= 0:
-#     save_images(results, img_save_folder)
-#     print(f'Done, result images are saved in: {img_save_folder}')
-# if rtn_warning:
-#     print(rtn_warning)
-#
-# # 2. text editing
-# mode = 'text-editing'
-# input_data = {
-#     "prompt": 'A cake with colorful characters that reads "EVERYDAY"',
-#     "seed": 8943410,
-#     "draw_pos": 'example_images/edit7.png',
-#     "ori_image": 'example_images/ref7.jpg'
-# }
-# results, rtn_code, rtn_warning, debug_info = pipe(input_data, mode=mode, **params)
-# if rtn_code >= 0:
-#     save_images(results, img_save_folder)
-#     print(f'Done, result images are saved in: {img_save_folder}')
-# if rtn_warning:
-#     print(rtn_warning)

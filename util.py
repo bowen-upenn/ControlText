@@ -62,4 +62,3 @@ def update_font_filename():
             # Rename the file
             os.rename(old_file, new_file)
             print(f"Renamed: '{filename}' to '{new_filename}'")
-# update_font_filename()
