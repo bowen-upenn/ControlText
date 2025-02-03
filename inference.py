@@ -194,10 +194,12 @@ if __name__ == '__main__':
     else:
         # Define paths to data
         json_paths = [
-            r'/tmp/datasets/AnyWord-3M/link_download/laion/test_data_v1.1.json',
+            r'/tmp/datasets/AnyWord-3M/AnyText-Benchmark/benchmark/laion_word/test1k.json',
+            r'/tmp/datasets/AnyWord-3M/AnyText-Benchmark/benchmark/wukong_word/test1k.json',
         ]
         glyph_paths = [
-            r'./Rethinking-Text-Segmentation/log/images/ocr_verified/laion_test',
+            r'./Rethinking-Text-Segmentation/log/images/output/anytext_benchmark/laion_word',
+            r'./Rethinking-Text-Segmentation/log/images/output/anytext_benchmark/wukong_word',
         ]
 
         # Load the dataset for inference

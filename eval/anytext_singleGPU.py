@@ -6,12 +6,12 @@ import einops
 import numpy as np
 import torch
 import random
-from PIL import ImageFont
+from PIL import Image, ImageFont
 
 from pytorch_lightning import seed_everything
 from cldm.model import create_model, load_state_dict
 from cldm.ddim_hacked import DDIMSampler
-from t3_dataset import draw_glyph, draw_glyph2, find_glyph, find_glyph2, get_caption_pos
+from t3_dataset import draw_glyph, draw_glyph2, find_glyph, find_glyph2, get_caption_pos, load_all_glyphs
 from dataset_util import load
 from tqdm import tqdm
 import argparse
@@ -21,12 +21,13 @@ save_memory = False
 # parameters
 config_yaml = './models_yaml/anytext_sd15.yaml'
 ckpt_path = './models/anytext_v1.0.ckpt'
-json_path = '/data/vdb/yuxiang.tyx/AIGC/data/laion_word/test1k.json'
-output_dir = '/data/vdb/yuxiang.tyx/AIGC/eval/gen_imgs_test'
-num_samples = 2
+json_path = '/tmp/datasets/AnyWord-3M/AnyText-Benchmark/benchmark/laion_word/test1k.json'
+glyph_path = None
+output_dir = './eval/laion_generated'
+num_samples = 4
 image_resolution = 512
 strength = 1.0
-ddim_steps = 20
+ddim_steps = 100
 scale = 9.0
 seed = 100
 eta = 0.0
@@ -35,12 +36,13 @@ n_prompt = 'longbody, lowres, bad anatomy, bad hands, missing fingers, extra dig
 PLACE_HOLDER = '*'
 max_chars = 20
 max_lines = 20
-font = ImageFont.truetype('./font/Arial_Unicode.ttf', size=60)
+font = ImageFont.truetype('./fonts/Arial_Unicode.ttf', size=60)
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description='generate images')
-    parser.add_argument('--input_json', type=str, default=json_path)
+    parser.add_argument('--json_path', type=str, default=json_path)
+    parser.add_argument('--glyph_path', type=str, default=glyph_path)
     parser.add_argument('--output_dir', type=str, default=output_dir)
     parser.add_argument('--ckpt_path', type=str, default=ckpt_path)
     args = parser.parse_args()
@@ -54,14 +56,20 @@ def arr2tensor(arr, bs):
     return _arr
 
 
-def load_data(input_path):
-    content = load(input_path)
+def load_data(json_path, glyph_path=None):
+    content = load(json_path)
     d = []
     count = 0
     for gt in content['data_list']:
         info = {}
         info['img_name'] = gt['img_name']
         info['caption'] = gt['caption']
+        info['img_path'] = os.path.join(content['data_root'], gt['img_name'])
+
+        if glyph_path is not None:
+            glyphs_path = os.path.join(glyph_path, gt['img_name'])
+            info['glyphs_path'] = glyphs_path
+
         if PLACE_HOLDER in info['caption']:
             count += 1
             info['caption'] = info['caption'].replace(PLACE_HOLDER, " ")
@@ -81,7 +89,7 @@ def load_data(input_path):
             info['texts'] = texts
             info['pos'] = pos
         d.append(info)
-    print(f'{input_path} loaded, imgs={len(d)}')
+    print(f'{json_path} loaded, imgs={len(d)}')
     if count > 0:
         print(f"Found {count} image's caption contain placeholder: {PLACE_HOLDER}, change to ' '...")
     return d
@@ -99,6 +107,7 @@ def get_item(data_list, item):
     item_dict = {}
     cur_item = data_list[item]
     item_dict['img_name'] = cur_item['img_name']
+    item_dict['img_path'] = cur_item['img_path']
     item_dict['caption'] = cur_item['caption']
     item_dict['glyphs'] = []
     item_dict['gly_line'] = []
@@ -113,17 +122,26 @@ def get_item(data_list, item):
         item_dict['caption'] = get_caption_pos(item_dict['caption'], pos_idxs, 0.0, PLACE_HOLDER)
         item_dict['polygons'] = [cur_item['polygons'][i] for i in sel_idxs]
         item_dict['texts'] = [cur_item['texts'][i][:max_chars] for i in sel_idxs]
+
         # glyphs
-        for idx, text in enumerate(item_dict['texts']):
-            glyphs = find_glyph2(all_glyphs_from_segmentation, item_dict['positions'][idx])
-            gly_line = find_glyph(glyphs, item_dict['polygons'][idx])
-            # gly_line = draw_glyph(font, text)
-            # glyphs = draw_glyph2(font, text, item_dict['polygons'][idx], scale=2)
-            item_dict['glyphs'] += [glyphs]
-            item_dict['gly_line'] += [gly_line]
-        # mask_pos
+        if 'glyphs_path' in cur_item:
+            all_glyphs_from_segmentation = load_all_glyphs(cur_item['glyphs_path'])
+            item_dict['all_glyphs_from_segmentation'] = all_glyphs_from_segmentation
+            item_dict['glyphs_path'] = cur_item['glyphs_path']
+
         for polygon in item_dict['polygons']:
             item_dict['positions'] += [draw_pos(polygon, 1.0)]
+
+        for idx, text in enumerate(item_dict['texts']):
+            if 'glyphs_path' in cur_item:
+                glyphs, _, _ = find_glyph2(all_glyphs_from_segmentation, item_dict['positions'][idx], scale=2, add_perturbation=False)
+                gly_line, _ = find_glyph(glyphs, item_dict['polygons'][idx], scale=2)
+            else:
+                gly_line = draw_glyph(font, text)
+                glyphs = draw_glyph2(font, text, item_dict['polygons'][idx], scale=2)
+            item_dict['glyphs'] += [glyphs]
+            item_dict['gly_line'] += [gly_line]
+
     fill_caption = False
     if fill_caption:  # if using embedding_manager, DO NOT fill caption!
         for i in range(len(item_dict['texts'])):
@@ -166,9 +184,12 @@ def process(model, ddim_sampler, item_dict, a_prompt, n_prompt, num_samples, ima
             info['glyphs'] += [arr2tensor(glyph, num_samples)]
             info['gly_line'] += [arr2tensor(gline, num_samples)]
             info['positions'] += [arr2tensor(pos, num_samples)]
+
         # get masked_x
-        ref_img = np.ones((H, W, 3)) * 127.5
-        masked_img = ((ref_img.astype(np.float32) / 127.5) - 1.0)*(1-hint)
+        ref_img = np.array(Image.open(item_dict['img_path']).convert('RGB'))
+        ref_img = (ref_img - np.min(ref_img)) / (np.max(ref_img) - np.min(ref_img))
+        ref_img = 2 * ref_img.astype(np.float32) - 1
+        masked_img = ref_img * (1 - hint)
         masked_img = np.transpose(masked_img, (2, 0, 1))
         masked_img = torch.from_numpy(masked_img.copy()).float().cuda()
         encoder_posterior = model.encode_first_stage(masked_img[None, ...])
@@ -192,7 +213,8 @@ def process(model, ddim_sampler, item_dict, a_prompt, n_prompt, num_samples, ima
         if save_memory:
             model.low_vram_shift(is_diffusing=False)
         x_samples = model.decode_first_stage(samples)
-        x_samples = (einops.rearrange(x_samples, 'b c h w -> b h w c') * 127.5 + 127.5).cpu().numpy().clip(0, 255).astype(np.uint8)
+        x_samples = 255 * (x_samples - torch.min(x_samples)) / (torch.max(x_samples) - torch.min(x_samples))
+        x_samples = (einops.rearrange(x_samples, 'b c h w -> b h w c')).cpu().numpy().clip(0, 255).astype(np.uint8)
 
         results = [x_samples[i] for i in range(num_samples)]
         results += [cost]
@@ -203,7 +225,7 @@ if __name__ == '__main__':
     args = parse_args()
     total = 21
     times = []
-    data_list = load_data(args.input_json)
+    data_list = load_data(args.json_path, args.glyph_path)
     model = create_model(config_yaml).cuda()
     model.load_state_dict(load_state_dict(args.ckpt_path, location='cuda'), strict=True)
     ddim_sampler = DDIMSampler(model)

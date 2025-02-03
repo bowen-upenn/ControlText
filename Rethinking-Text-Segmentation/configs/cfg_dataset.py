@@ -17,6 +17,87 @@ cfg.TRY_SAMPLE = None
 
 
 #################################
+#####   laion_ablation      #####
+#################################
+cfg_laion_ablation = copy.deepcopy(cfg)
+cfg_laion_ablation.DATASET_NAME = 'laion_ablation'
+cfg_laion_ablation.ROOT_DIR = '/pool/bwjiang/controltext/eval/laion_ablation'
+cfg_laion_ablation.IM_MEAN = [0.485, 0.456, 0.406]
+cfg_laion_ablation.IM_STD = [0.229, 0.224, 0.225]
+cfg_laion_ablation.SEGLABEL_IGNORE_LABEL = 999
+cfg_laion_ablation.CLASS_NUM = 2
+
+
+#################################
+#####   laion_anytext       #####
+#################################
+cfg_laion_anytext = copy.deepcopy(cfg)
+cfg_laion_anytext.DATASET_NAME = 'laion_anytext'
+cfg_laion_anytext.ROOT_DIR = '/pool/bwjiang/controltext/eval/laion_anytext'
+cfg_laion_anytext.IM_MEAN = [0.485, 0.456, 0.406]
+cfg_laion_anytext.IM_STD = [0.229, 0.224, 0.225]
+cfg_laion_anytext.SEGLABEL_IGNORE_LABEL = 999
+cfg_laion_anytext.CLASS_NUM = 2
+
+#################################
+#####  laion_controltext    #####
+#################################
+cfg_laion_controltext = copy.deepcopy(cfg)
+cfg_laion_controltext.DATASET_NAME = 'laion_controltext'
+cfg_laion_controltext.ROOT_DIR = '/pool/bwjiang/controltext/eval/laion_controltext'
+cfg_laion_controltext.IM_MEAN = [0.485, 0.456, 0.406]
+cfg_laion_controltext.IM_STD = [0.229, 0.224, 0.225]
+cfg_laion_controltext.SEGLABEL_IGNORE_LABEL = 999
+cfg_laion_controltext.CLASS_NUM = 2
+
+#################################
+#####   wukong_ablation     #####
+#################################
+cfg_wukong_ablation = copy.deepcopy(cfg)
+cfg_wukong_ablation.DATASET_NAME = 'wukong_ablation'
+cfg_wukong_ablation.ROOT_DIR = '/pool/bwjiang/controltext/eval/wukong_ablation'
+cfg_wukong_ablation.IM_MEAN = [0.485, 0.456, 0.406]
+cfg_wukong_ablation.IM_STD = [0.229, 0.224, 0.225]
+cfg_wukong_ablation.SEGLABEL_IGNORE_LABEL = 999
+cfg_wukong_ablation.CLASS_NUM = 2
+
+#################################
+#####   wukong_anytext      #####
+#################################
+cfg_wukong_anytext = copy.deepcopy(cfg)
+cfg_wukong_anytext.DATASET_NAME = 'wukong_anytext'
+cfg_wukong_anytext.ROOT_DIR = '/pool/bwjiang/controltext/eval/wukong_anytext'
+cfg_wukong_anytext.IM_MEAN = [0.485, 0.456, 0.406]
+cfg_wukong_anytext.IM_STD = [0.229, 0.224, 0.225]
+cfg_wukong_anytext.SEGLABEL_IGNORE_LABEL = 999
+cfg_wukong_anytext.CLASS_NUM = 2
+
+#################################
+#####  wukong_controltext   #####
+#################################
+cfg_wukong_controltext = copy.deepcopy(cfg)
+cfg_wukong_controltext.DATASET_NAME = 'wukong_controltext'
+cfg_wukong_controltext.ROOT_DIR = '/pool/bwjiang/controltext/eval/wukong_controltext'
+cfg_wukong_controltext.IM_MEAN = [0.485, 0.456, 0.406]
+cfg_wukong_controltext.IM_STD = [0.229, 0.224, 0.225]
+cfg_wukong_controltext.SEGLABEL_IGNORE_LABEL = 999
+cfg_wukong_controltext.CLASS_NUM = 2
+
+
+#################################
+#####  anytext_benchmark    #####
+#################################
+
+cfg_anytext_benchmark = copy.deepcopy(cfg)
+cfg_anytext_benchmark.DATASET_NAME = 'anytext_benchmark'
+cfg_anytext_benchmark.ROOT_DIR = '/pool/bwjiang/controltext/Rethinking-Text-Segmentation/data/AnyText-Benchmark/imgs'
+cfg_anytext_benchmark.IM_MEAN = [0.485, 0.456, 0.406]
+cfg_anytext_benchmark.IM_STD = [0.229, 0.224, 0.225]
+cfg_anytext_benchmark.SEGLABEL_IGNORE_LABEL = 999
+cfg_anytext_benchmark.CLASS_NUM = 2
+
+
+#################################
 #####      wukong_1of5      #####
 #################################
 

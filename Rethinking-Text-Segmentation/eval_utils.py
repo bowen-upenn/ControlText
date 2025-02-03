@@ -185,6 +185,34 @@ def set_cfg(cfg, dsname):
         cfg.DATA.LOADER_PIPELINE = [
             'NumpyImageLoader'
         ]
+    elif dsname == 'anytext_benchmark':
+        cfg.DATA.LOADER_PIPELINE = [
+            'NumpyImageLoader'
+        ]
+    elif dsname == 'laion_ablation':
+        cfg.DATA.LOADER_PIPELINE = [
+            'NumpyImageLoader'
+        ]
+    elif dsname == 'laion_anytext':
+        cfg.DATA.LOADER_PIPELINE = [
+            'NumpyImageLoader'
+        ]
+    elif dsname == 'laion_controltext':
+        cfg.DATA.LOADER_PIPELINE = [
+            'NumpyImageLoader'
+        ]
+    elif dsname == 'wukong_ablation':
+        cfg.DATA.LOADER_PIPELINE = [
+            'NumpyImageLoader'
+        ]
+    elif dsname == 'wukong_anytext':
+        cfg.DATA.LOADER_PIPELINE = [
+            'NumpyImageLoader'
+        ]
+    elif dsname == 'wukong_controltext':
+        cfg.DATA.LOADER_PIPELINE = [
+            'NumpyImageLoader'
+        ]
     else:
         raise ValueError
 
@@ -513,10 +541,12 @@ class es(object):
             predicted_image = Image.fromarray(prfn, 'L')
             # predicted_image.save('log/images/output_' + str(idx) + '.jpg')
             output_dir = osp.join('log/images/output/', cfg.DATA.DATASET_NAME)
-            filename = item['fn'][0]
+            # Add '.jpg' as the file extension
+            filename = item['fn'][0] + '.jpg'
             predicted_image_path = osp.join(output_dir, filename)
             print(predicted_image_path)
             os.makedirs(output_dir, exist_ok=True)  # Ensure the directory exists
+            print("predicted_image_path: ", predicted_image_path)
             predicted_image.save(predicted_image_path)
 
             if gtsem is not None:
@@ -552,7 +582,7 @@ class es(object):
                 cfg.LOG_DIR, 'result.json')
             evaluator.save(resultf, cfg)
             # Print average inference time
-            avg_inference_time = self.total_inference_time / self.inference_count
-            print(f"Average inference time: {avg_inference_time:.4f} seconds")
+            # avg_inference_time = self.total_inference_time / self.inference_count
+            # print(f"Average inference time: {avg_inference_time:.4f} seconds")
 
         return eval_result

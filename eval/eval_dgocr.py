@@ -13,6 +13,7 @@ import torch
 import Levenshtein
 import numpy as np
 import math
+import json
 import argparse
 PRINT_DEBUG = False
 num_samples = 4
@@ -27,24 +28,19 @@ def parse_args():
         help='path of generated images for eval'
     )
     parser.add_argument(
-        "--input_json",
+        "--json_path",
         type=str,
         default='/tmp/datasets/AnyWord-3M/AnyText-Benchmark/benchmark/laion_word/test1k.json',
         help='json path for evaluation dataset'
     )
+    parser.add_argument(
+        "--glyph_path",
+        type=str,
+        default='',
+        help='json path for the glyphs of the evaluation dataset'
+    )
     args = parser.parse_args()
     return args
-
-
-args = parse_args()
-img_dir = args.img_dir
-input_json = args.input_json
-
-if 'wukong' in input_json:
-    model_lang = 'ch'
-    rec_char_dict_path = os.path.join('./ocr_weights', 'ppocr_keys_v1.txt')
-elif 'laion' in input_json:
-    rec_char_dict_path = os.path.join('./ocr_weights', 'en_dict.txt')
 
 
 def get_ld(ls1, ls2):
@@ -92,6 +88,17 @@ def pre_process(img_list, shape):
 
 
 def main():
+    args = parse_args()
+    img_dir = args.img_dir
+    json_path = args.json_path
+    glyph_path = args.glyph_path
+
+    if 'wukong' in json_path:
+        model_lang = 'ch'
+        rec_char_dict_path = os.path.join('./ocr_weights', 'ppocr_keys_v1.txt')
+    elif 'laion' in json_path:
+        rec_char_dict_path = os.path.join('./ocr_weights', 'en_dict.txt')
+
     predictor = pipeline(Tasks.ocr_recognition, model='damo/cv_convnextTiny_ocr-recognition-general_damo')
     rec_image_shape = "3, 48, 320"
     args = edict()
@@ -101,13 +108,21 @@ def main():
     args.use_fp16 = False
     text_recognizer = TextRecognizer(args, None)
 
-    data_list = load_data(input_json)
+    if len(glyph_path) > 0:
+        invalid_json_path = './Rethinking-Text-Segmentation/log/images/ocr_verified/invalid_gly_lines_test.json'
+        with open(invalid_json_path, 'r') as f:
+            invalid_glyph_lines = json.load(f)
+        data_list = load_data(json_path, glyph_path)
+    else:
+        data_list = load_data(json_path)
+
     sen_acc = []
     edit_dist = []
     for i in tqdm(range(len(data_list)), desc='evaluate'):
         item_dict = get_item(data_list, i)
         img_name = item_dict['img_name'].split('.')[0]
         n_lines = item_dict['n_lines']
+
         for j in range(num_samples):
             img_path = os.path.join(img_dir, img_name+f'_{j}.jpg')
             img = cv2.imread(img_path)
@@ -117,11 +132,21 @@ def main():
             img = img.permute(2, 0, 1).float()  # HWC-->CHW
             gt_texts = []
             pred_texts = []
+
+            if len(glyph_path) > 0:
+                glyph_path = item_dict['glyphs_path']
             for k in range(n_lines):  # line
+                if len(glyph_path) > 0 and glyph_path in invalid_glyph_lines:
+                    for element in invalid_glyph_lines[glyph_path]:
+                        if item_dict['texts'][k] in element['text']:
+                            n_lines -= 1
+                            continue
+
                 gt_texts += [item_dict['texts'][k]]
                 np_pos = (item_dict['positions'][k]*255.).astype(np.uint8)  # 0-1, hwc
                 pred_text = crop_image(img, np_pos)
                 pred_texts += [pred_text]
+
             if n_lines > 0:
                 pred_texts = pre_process(pred_texts, rec_image_shape)
                 preds_all = []

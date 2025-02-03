@@ -41,7 +41,14 @@ from configs.cfg_dataset import (
     cfg_lsvt,
     cfg_mlt2019,
     cfg_MTWI2018,
-    cfg_ReCTS
+    cfg_ReCTS,
+    cfg_anytext_benchmark,
+    cfg_laion_ablation,
+    cfg_laion_anytext,
+    cfg_laion_controltext,
+    cfg_wukong_ablation,
+    cfg_wukong_anytext,
+    cfg_wukong_controltext
 )
 from configs.cfg_model import cfg_texrnet as cfg_mdel
 from configs.cfg_base import cfg_train, cfg_test
@@ -138,6 +145,20 @@ if __name__ == '__main__':
         cfg_data = cfg_MTWI2018
     elif args.dsname == 'ReCTS':
         cfg_data = cfg_ReCTS
+    elif args.dsname == 'anytext_benchmark':
+        cfg_data = cfg_anytext_benchmark
+    elif args.dsname == 'laion_ablation':
+        cfg_data = cfg_laion_ablation
+    elif args.dsname == 'laion_anytext':
+        cfg_data = cfg_laion_anytext
+    elif args.dsname == 'laion_controltext':
+        cfg_data = cfg_laion_controltext
+    elif args.dsname == 'wukong_ablation':
+        cfg_data = cfg_wukong_ablation
+    elif args.dsname == 'wukong_anytext':
+        cfg_data = cfg_wukong_anytext
+    elif args.dsname == 'wukong_controltext':
+        cfg_data = cfg_wukong_controltext
 
     else:
         raise ValueError
@@ -224,6 +245,20 @@ if __name__ == '__main__':
         elif args.dsname == 'MTWI2018':
             cfg.DATA.DATASET_MODE = 'test'
         elif args.dsname == 'ReCTS':
+            cfg.DATA.DATASET_MODE = 'test'
+        elif args.dsname == 'anytext_benchmark':
+            cfg.DATA.DATASET_MODE = 'test'
+        elif args.dsname == 'laion_ablation':
+            cfg.DATA.DATASET_MODE = 'test'
+        elif args.dsname == 'laion_anytext':
+            cfg.DATA.DATASET_MODE = 'test'
+        elif args.dsname == 'laion_controltext':
+            cfg.DATA.DATASET_MODE = 'test'
+        elif args.dsname == 'wukong_ablation':
+            cfg.DATA.DATASET_MODE = 'test'
+        elif args.dsname == 'wukong_anytext':
+            cfg.DATA.DATASET_MODE = 'test'
+        elif args.dsname == 'wukong_controltext':
             cfg.DATA.DATASET_MODE = 'test'
 
         else:

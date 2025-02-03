@@ -12,11 +12,11 @@ from torch.utils.data.distributed import DistributedSampler
 
 NUM_NODES = 1
 # Configs
-batch_size = 3  # default 6
-grad_accum = 2  # enable perceptual loss may cost a lot of VRAM, you can set a smaller batch_size and make sure grad_accum * batch_size = 6
-ckpt_path = './models/lightning_logs/version_1/checkpoints/epoch=6-step=364999.ckpt'  # if not None, load ckpt_path and continue training task, will not load "resume_path"
+batch_size = 1  # default 6
+grad_accum = 6  # enable perceptual loss may cost a lot of VRAM, you can set a smaller batch_size and make sure grad_accum * batch_size = 6
+ckpt_path = './models/lightning_logs/version_5/checkpoints/epoch=11-step=849999.ckpt'  # if not None, load ckpt_path and continue training task, will not load "resume_path"
 resume_path = None # './models/anytext_v1.1.ckpt' # './models/anytext_sd15_scratch.ckpt'  # finetune from scratch
-model_config = './models_yaml/anytext_sd15.yaml'  # use anytext_sd15_perloss.yaml to enable perceptual loss
+model_config = './models_yaml/anytext_sd15_perloss.yaml'  # use anytext_sd15_perloss.yaml to enable perceptual loss
 invalid_json_path = './Rethinking-Text-Segmentation/log/images/ocr_verified/invalid_gly_lines.json'
 logger_freq = 5000
 learning_rate = 2e-5  # default 2e-5
@@ -26,7 +26,7 @@ root_dir = './models'  # path for save checkpoints
 dataset_percent = 1.0  # 1.0 use full datasets, 0.0566 use ~200k images for ablation study
 save_steps = 5000  # step frequency of saving checkpoints
 save_epochs = None  # epoch frequency of saving checkpoints
-max_epochs = 10  # default 60
+max_epochs = 20  # default 60
 assert (save_steps is None) != (save_epochs is None)
 
 
@@ -56,7 +56,7 @@ if __name__ == '__main__':
         mode="max",
     )
     json_paths = [
-        r'/tmp/datasets/AnyWord-3M/link_download/laion/test_data_v1.1.json',
+        # r'/tmp/datasets/AnyWord-3M/link_download/laion/test_data_v1.1.json',
         r'/tmp/datasets/AnyWord-3M/link_download/laion/data_v1.1.json',
         r'/tmp/datasets/AnyWord-3M/link_download/wukong_1of5/data_v1.1.json',
         r'/tmp/datasets/AnyWord-3M/link_download/wukong_2of5/data_v1.1.json',
@@ -72,7 +72,7 @@ if __name__ == '__main__':
         r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/ReCTS/data.json'
     ]
     glyph_paths = [
-        r'./Rethinking-Text-Segmentation/log/images/ocr_verified/laion_test',
+        # r'./Rethinking-Text-Segmentation/log/images/ocr_verified/laion_test',
         r'./Rethinking-Text-Segmentation/log/images/ocr_verified/laion',
         r'./Rethinking-Text-Segmentation/log/images/ocr_verified/wukong_1of5',
         r'./Rethinking-Text-Segmentation/log/images/ocr_verified/wukong_2of5',

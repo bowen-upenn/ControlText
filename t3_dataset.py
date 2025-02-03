@@ -753,7 +753,7 @@ class T3DataSet(Dataset):
             if confidence > 0.8:
                 # Check if the edit distance between the texts is less than 2
                 edit_distance = SequenceMatcher(None, detected_text, text).ratio()
-                if edit_distance > 0.8:  # If texts are within 1 edit distance
+                if edit_distance > 0.9:  # If texts are within 1 edit distance
                     if verbose:
                         print(f"High quality detection: Close match (edit distance ratio: {edit_distance}).\n")
                     return True
@@ -902,7 +902,7 @@ def run_inference(rank, world_size, json_paths, glyph_paths, glyph_scale, show_c
             if len(invalid_gly_lines_curr_image) > 0:
                 invalid_gly_lines[data['glyphs_path'][0]] = invalid_gly_lines_curr_image
 
-            if i % json_write_freq == 0:
+            if i % json_write_freq == 0 or i == len(train_loader) - 1:
                 # Append the invalid gly_lines for this image to the JSON file
                 append_invalid_gly_lines_to_file(invalid_json_path, invalid_gly_lines)
                 invalid_gly_lines = {}
@@ -935,12 +935,12 @@ if __name__ == '__main__':
         assert world_size == 1
 
     show_imgs_dir = 'show_results'
-    invalid_json_path = './Rethinking-Text-Segmentation/log/images/ocr_verified/invalid_gly_lines.json'
+    invalid_json_path = './Rethinking-Text-Segmentation/log/images/ocr_verified/invalid_gly_lines_test.json'
 
     show_count = -1
     glyph_scale = 2
     dataset_percent = 1.0 #0.0566   # 1.0 use full datasets, 0.0566 use ~200k images for ablation study
-    json_write_freq = 1000
+    json_write_freq = 100
     # if os.path.exists(show_imgs_dir):
     #     shutil.rmtree(show_imgs_dir)
     # os.makedirs(show_imgs_dir)
@@ -955,36 +955,40 @@ if __name__ == '__main__':
         ]
     else:
         json_paths = [
+            r'/tmp/datasets/AnyWord-3M/AnyText-Benchmark/benchmark/laion_word/test1k.json',
+            r'/tmp/datasets/AnyWord-3M/AnyText-Benchmark/benchmark/wukong_word/test1k.json',
             # r'/tmp/datasets/AnyWord-3M/link_download/laion/test_data_v1.1.json',
-            r'/tmp/datasets/AnyWord-3M/link_download/laion/data_v1.1.json',
-            r'/tmp/datasets/AnyWord-3M/link_download/wukong_1of5/data_v1.1.json',
-            r'/tmp/datasets/AnyWord-3M/link_download/wukong_2of5/data_v1.1.json',
-            r'/tmp/datasets/AnyWord-3M/link_download/wukong_3of5/data_v1.1.json',
-            r'/tmp/datasets/AnyWord-3M/link_download/wukong_4of5/data_v1.1.json',
-            r'/tmp/datasets/AnyWord-3M/link_download/wukong_5of5/data_v1.1.json',
-            r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/Art/data.json',
-            r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/COCO_Text/data.json',
-            r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/icdar2017rctw/data.json',
-            r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/LSVT/data.json',
-            r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/mlt2019/data.json',
-            r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/MTWI2018/data.json',
-            r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/ReCTS/data.json'
+            # r'/tmp/datasets/AnyWord-3M/link_download/laion/data_v1.1.json',
+            # r'/tmp/datasets/AnyWord-3M/link_download/wukong_1of5/data_v1.1.json',
+            # r'/tmp/datasets/AnyWord-3M/link_download/wukong_2of5/data_v1.1.json',
+            # r'/tmp/datasets/AnyWord-3M/link_download/wukong_3of5/data_v1.1.json',
+            # r'/tmp/datasets/AnyWord-3M/link_download/wukong_4of5/data_v1.1.json',
+            # r'/tmp/datasets/AnyWord-3M/link_download/wukong_5of5/data_v1.1.json',
+            # r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/Art/data.json',
+            # r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/COCO_Text/data.json',
+            # r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/icdar2017rctw/data.json',
+            # r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/LSVT/data.json',
+            # r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/mlt2019/data.json',
+            # r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/MTWI2018/data.json',
+            # r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/ReCTS/data.json'
         ]
         glyph_paths = [
+            r'./Rethinking-Text-Segmentation/log/images/output/anytext_benchmark/laion_word',
+            r'./Rethinking-Text-Segmentation/log/images/output/anytext_benchmark/wukong_word',
             # r'./Rethinking-Text-Segmentation/log/images/output/laion_test',
-            r'./Rethinking-Text-Segmentation/log/images/output/laion',
-            r'./Rethinking-Text-Segmentation/log/images/output/wukong_1of5',
-            r'./Rethinking-Text-Segmentation/log/images/output/wukong_2of5',
-            r'./Rethinking-Text-Segmentation/log/images/output/wukong_3of5',
-            r'./Rethinking-Text-Segmentation/log/images/output/wukong_4of5',
-            r'./Rethinking-Text-Segmentation/log/images/output/wukong_5of5',
-            r'./Rethinking-Text-Segmentation/log/images/output/Art',
-            r'./Rethinking-Text-Segmentation/log/images/output/COCO_Text',
-            r'./Rethinking-Text-Segmentation/log/images/output/icdar2017rctw',
-            r'./Rethinking-Text-Segmentation/log/images/output/LSVT',
-            r'./Rethinking-Text-Segmentation/log/images/output/mlt2019',
-            r'./Rethinking-Text-Segmentation/log/images/output/MTWI2018',
-            r'./Rethinking-Text-Segmentation/log/images/output/ReCTS'
+            # r'./Rethinking-Text-Segmentation/log/images/output/laion',
+            # r'./Rethinking-Text-Segmentation/log/images/output/wukong_1of5',
+            # r'./Rethinking-Text-Segmentation/log/images/output/wukong_2of5',
+            # r'./Rethinking-Text-Segmentation/log/images/output/wukong_3of5',
+            # r'./Rethinking-Text-Segmentation/log/images/output/wukong_4of5',
+            # r'./Rethinking-Text-Segmentation/log/images/output/wukong_5of5',
+            # r'./Rethinking-Text-Segmentation/log/images/output/Art',
+            # r'./Rethinking-Text-Segmentation/log/images/output/COCO_Text',
+            # r'./Rethinking-Text-Segmentation/log/images/output/icdar2017rctw',
+            # r'./Rethinking-Text-Segmentation/log/images/output/LSVT',
+            # r'./Rethinking-Text-Segmentation/log/images/output/mlt2019',
+            # r'./Rethinking-Text-Segmentation/log/images/output/MTWI2018',
+            # r'./Rethinking-Text-Segmentation/log/images/output/ReCTS'
         ]
 
         # Check if the file exists
