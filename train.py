@@ -26,7 +26,7 @@ root_dir = './models'  # path for save checkpoints
 dataset_percent = 1.0  # 1.0 use full datasets, 0.0566 use ~200k images for ablation study
 save_steps = 5000  # step frequency of saving checkpoints
 save_epochs = None  # epoch frequency of saving checkpoints
-max_epochs = 20  # default 60
+max_epochs = 50  # default 60
 assert (save_steps is None) != (save_epochs is None)
 
 
@@ -56,6 +56,8 @@ if __name__ == '__main__':
         mode="max",
     )
     json_paths = [
+        # r'/tmp/datasets/AnyWord-3M/AnyText-Benchmark/benchmark/laion_word/test1k.json',
+        # r'/tmp/datasets/AnyWord-3M/AnyText-Benchmark/benchmark/wukong_word/test1k.json',
         # r'/tmp/datasets/AnyWord-3M/link_download/laion/test_data_v1.1.json',
         r'/tmp/datasets/AnyWord-3M/link_download/laion/data_v1.1.json',
         r'/tmp/datasets/AnyWord-3M/link_download/wukong_1of5/data_v1.1.json',
@@ -72,6 +74,8 @@ if __name__ == '__main__':
         r'/tmp/datasets/AnyWord-3M/link_download/ocr_data/ReCTS/data.json'
     ]
     glyph_paths = [
+        # r'./Rethinking-Text-Segmentation/log/images/output/anytext_benchmark/laion_word',
+        # r'./Rethinking-Text-Segmentation/log/images/output/anytext_benchmark/wukong_word',
         # r'./Rethinking-Text-Segmentation/log/images/ocr_verified/laion_test',
         r'./Rethinking-Text-Segmentation/log/images/ocr_verified/laion',
         r'./Rethinking-Text-Segmentation/log/images/ocr_verified/wukong_1of5',

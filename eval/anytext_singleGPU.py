@@ -158,7 +158,8 @@ def get_item(data_list, item):
     return item_dict
 
 
-def process(model, ddim_sampler, item_dict, a_prompt, n_prompt, num_samples, image_resolution, ddim_steps, strength, scale, seed, eta):
+def process(model, ddim_sampler, item_dict, a_prompt, n_prompt, num_samples, image_resolution,
+            ddim_steps, strength, scale, seed, eta):
     with torch.no_grad():
         prompt = item_dict['caption']
         n_lines = item_dict['n_lines']
@@ -176,7 +177,7 @@ def process(model, ddim_sampler, item_dict, a_prompt, n_prompt, num_samples, ima
         info['glyphs'] = []
         info['gly_line'] = []
         info['positions'] = []
-        info['n_lines'] = [n_lines]*num_samples
+        info['n_lines'] = [n_lines] * num_samples
         for i in range(n_lines):
             glyph = glyphs[i]
             pos = pos_imgs[i]
@@ -198,8 +199,12 @@ def process(model, ddim_sampler, item_dict, a_prompt, n_prompt, num_samples, ima
 
         hint = arr2tensor(hint, num_samples)
 
-        cond = model.get_learned_conditioning(dict(c_concat=[hint], c_crossattn=[[prompt + ', ' + a_prompt] * num_samples], text_info=info))
-        un_cond = model.get_learned_conditioning(dict(c_concat=[hint], c_crossattn=[[n_prompt] * num_samples], text_info=info))
+        cond = model.get_learned_conditioning(dict(c_concat=[hint],
+                                                   c_crossattn=[[prompt + ', ' + a_prompt] * num_samples],
+                                                   text_info=info))
+        un_cond = model.get_learned_conditioning(dict(c_concat=[hint],
+                                                      c_crossattn=[[n_prompt] * num_samples],
+                                                      text_info=info))
         shape = (4, H // 8, W // 8)
         if save_memory:
             model.low_vram_shift(is_diffusing=True)
@@ -209,7 +214,7 @@ def process(model, ddim_sampler, item_dict, a_prompt, n_prompt, num_samples, ima
                                                      shape, cond, verbose=False, eta=eta,
                                                      unconditional_guidance_scale=scale,
                                                      unconditional_conditioning=un_cond)
-        cost = (time.time() - tic)*1000.
+        cost = (time.time() - tic) * 1000.
         if save_memory:
             model.low_vram_shift(is_diffusing=False)
         x_samples = model.decode_first_stage(samples)
@@ -218,7 +223,202 @@ def process(model, ddim_sampler, item_dict, a_prompt, n_prompt, num_samples, ima
 
         results = [x_samples[i] for i in range(num_samples)]
         results += [cost]
+
+        # ------------------- POISSON BLENDING PART -------------------
+        # Reload the original image in [0..255] space (uint8)
+        orig_img = np.array(Image.open(item_dict['img_path']).convert('RGB'))
+
+        # 'hint' is shape (b, 1, H, W); extract a single mask from the batch
+        # (often each sample has the same mask)
+        mask_2d = hint[0, 0].cpu().numpy().astype(np.uint8)  # shape (H, W), in {0,1}
+        mask_255 = (mask_2d * 255)  # shape (H, W), in {0,255}
+
+        # Find all disjoint "blobs" (contours) in the mask
+        contours, _ = cv2.findContours(mask_255, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        # If there's exactly one masked region and it is "small" (area < 25% of the full image),
+        # perform zoom blending on that region.
+        if len(contours) == 1:
+            x, y, w, h = cv2.boundingRect(contours[0])
+            if (w * h) < (0.25 * (W * H)):
+                for i in range(num_samples):
+                    # 'results[i]' is the generated inpainted content, shape (H, W, 3)
+                    src = results[i]
+                    # Crop the corresponding region from the generated image and the original image
+                    src_crop = src[y:y + h, x:x + w]
+                    orig_crop = orig_img[y:y + h, x:x + w]
+                    mask_crop = mask_255[y:y + h, x:x + w]
+
+                    # Zoom the cropped patches up to the full input size.
+                    src_zoom = cv2.resize(src_crop, (W, H), interpolation=cv2.INTER_LINEAR)
+                    orig_zoom = cv2.resize(orig_crop, (W, H), interpolation=cv2.INTER_LINEAR)
+                    mask_zoom = cv2.resize(mask_crop, (W, H), interpolation=cv2.INTER_LINEAR)
+                    # Re-binarize the mask
+                    mask_zoom = ((mask_zoom > 127) * 255).astype(np.uint8)
+
+                    center = (W // 2, H // 2)
+                    blended_zoom = cv2.seamlessClone(
+                        src_zoom,  # the "generated" zoomed patch
+                        orig_zoom,  # the zoomed original patch
+                        mask_zoom,  # zoomed mask
+                        center,
+                        cv2.NORMAL_CLONE  # or cv2.MIXED_CLONE
+                    )
+                    # Downscale the blended zoom back to the original region size
+                    blended_patch = cv2.resize(blended_zoom, (w, h), interpolation=cv2.INTER_LINEAR)
+                    # Paste the blended patch back into a copy of the original image.
+                    blended_full = orig_img.copy()
+                    blended_full[y:y + h, x:x + w] = blended_patch
+                    results[i] = blended_full
+            else:
+                # Otherwise, process normally (blend each contour individually)
+                for i in range(num_samples):
+                    src = results[i]
+                    blended = orig_img.copy()
+                    for c in contours:
+                        x_c, y_c, w_c, h_c = cv2.boundingRect(c)
+                        if w_c == 0 or h_c == 0:
+                            continue
+                        center = (x_c + w_c // 2, y_c + h_c // 2)
+                        submask = np.zeros_like(mask_255)
+                        cv2.drawContours(submask, [c], -1, 255, -1)
+                        blended = cv2.seamlessClone(
+                            src,  # the "generated" image
+                            blended,  # current blending result (dst)
+                            submask,  # 8-bit mask of the region
+                            center,
+                            cv2.NORMAL_CLONE  # or cv2.MIXED_CLONE
+                        )
+                    results[i] = blended
+        else:
+            # More than one masked region: process normally
+            for i in range(num_samples):
+                src = results[i]
+                blended = orig_img.copy()
+                for c in contours:
+                    x_c, y_c, w_c, h_c = cv2.boundingRect(c)
+                    if w_c == 0 or h_c == 0:
+                        continue
+                    center = (x_c + w_c // 2, y_c + h_c // 2)
+                    submask = np.zeros_like(mask_255)
+                    cv2.drawContours(submask, [c], -1, 255, -1)
+                    blended = cv2.seamlessClone(
+                        src,  # the "generated" image
+                        blended,  # current blending result (dst)
+                        submask,  # 8-bit mask of the region
+                        center,
+                        cv2.NORMAL_CLONE  # or cv2.MIXED_CLONE
+                    )
+                results[i] = blended
+        # ------------------------------------------------------------
+
     return results
+
+
+# def process(model, ddim_sampler, item_dict, a_prompt, n_prompt, num_samples, image_resolution, ddim_steps, strength, scale, seed, eta):
+#     with torch.no_grad():
+#         prompt = item_dict['caption']
+#         n_lines = item_dict['n_lines']
+#         pos_imgs = item_dict['positions']
+#         glyphs = item_dict['glyphs']
+#         gly_line = item_dict['gly_line']
+#         hint = np.sum(pos_imgs, axis=0).clip(0, 1)
+#         H, W, = (512, 512)
+#         if seed == -1:
+#             seed = random.randint(0, 65535)
+#         seed_everything(seed)
+#         if save_memory:
+#             model.low_vram_shift(is_diffusing=False)
+#         info = {}
+#         info['glyphs'] = []
+#         info['gly_line'] = []
+#         info['positions'] = []
+#         info['n_lines'] = [n_lines]*num_samples
+#         for i in range(n_lines):
+#             glyph = glyphs[i]
+#             pos = pos_imgs[i]
+#             gline = gly_line[i]
+#             info['glyphs'] += [arr2tensor(glyph, num_samples)]
+#             info['gly_line'] += [arr2tensor(gline, num_samples)]
+#             info['positions'] += [arr2tensor(pos, num_samples)]
+#
+#         # get masked_x
+#         ref_img = np.array(Image.open(item_dict['img_path']).convert('RGB'))
+#         ref_img = (ref_img - np.min(ref_img)) / (np.max(ref_img) - np.min(ref_img))
+#         ref_img = 2 * ref_img.astype(np.float32) - 1
+#         masked_img = ref_img * (1 - hint)
+#         masked_img = np.transpose(masked_img, (2, 0, 1))
+#         masked_img = torch.from_numpy(masked_img.copy()).float().cuda()
+#         encoder_posterior = model.encode_first_stage(masked_img[None, ...])
+#         masked_x = model.get_first_stage_encoding(encoder_posterior).detach()
+#         info['masked_x'] = torch.cat([masked_x for _ in range(num_samples)], dim=0)
+#
+#         hint = arr2tensor(hint, num_samples)
+#
+#         cond = model.get_learned_conditioning(dict(c_concat=[hint], c_crossattn=[[prompt + ', ' + a_prompt] * num_samples], text_info=info))
+#         un_cond = model.get_learned_conditioning(dict(c_concat=[hint], c_crossattn=[[n_prompt] * num_samples], text_info=info))
+#         shape = (4, H // 8, W // 8)
+#         if save_memory:
+#             model.low_vram_shift(is_diffusing=True)
+#         model.control_scales = ([strength] * 13)
+#         tic = time.time()
+#         samples, intermediates = ddim_sampler.sample(ddim_steps, num_samples,
+#                                                      shape, cond, verbose=False, eta=eta,
+#                                                      unconditional_guidance_scale=scale,
+#                                                      unconditional_conditioning=un_cond)
+#         cost = (time.time() - tic)*1000.
+#         if save_memory:
+#             model.low_vram_shift(is_diffusing=False)
+#         x_samples = model.decode_first_stage(samples)
+#         x_samples = 255 * (x_samples - torch.min(x_samples)) / (torch.max(x_samples) - torch.min(x_samples))
+#         x_samples = (einops.rearrange(x_samples, 'b c h w -> b h w c')).cpu().numpy().clip(0, 255).astype(np.uint8)
+#
+#         results = [x_samples[i] for i in range(num_samples)]
+#         results += [cost]
+#
+#         # ------------------- POISSON BLENDING PART -------------------
+#         # Reload the original image in [0..255] space (uint8)
+#         orig_img = np.array(Image.open(item_dict['img_path']).convert('RGB'))
+#
+#         # 'hint' is shape (b, 1, H, W); extract a single mask from the batch
+#         # (often each sample has the same mask)
+#         mask_2d = hint[0, 0].cpu().numpy().astype(np.uint8)  # shape (H, W), in {0,1}
+#         mask_255 = (mask_2d * 255)  # shape (H, W), in {0,255}
+#
+#         # Find all disjoint "blobs" (contours) in the mask
+#         contours, _ = cv2.findContours(mask_255, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+#
+#         for i in range(num_samples):
+#             # 'results[i]' is the generated inpainted content, shape (H, W, 3)
+#             src = results[i]
+#             # Start from the original image as our "blended" destination
+#             blended = orig_img.copy()
+#
+#             # Blend each disconnected mask region one by one
+#             for c in contours:
+#                 x, y, w, h = cv2.boundingRect(c)
+#                 if w == 0 or h == 0:
+#                     continue
+#                 center = (x + w // 2, y + h // 2)
+#
+#                 # Draw just this one contour to a submask
+#                 submask = np.zeros_like(mask_255)
+#                 cv2.drawContours(submask, [c], -1, 255, -1)
+#
+#                 # Perform Poisson blending for this contour
+#                 blended = cv2.seamlessClone(
+#                     src,  # the "generated" image
+#                     blended,  # current blending result (dst)
+#                     submask,  # 8-bit mask of the region
+#                     center,
+#                     cv2.NORMAL_CLONE  # or cv2.MIXED_CLONE
+#                 )
+#
+#             # After processing all contours, store the final blended result
+#             results[i] = blended
+#         # ------------------------------------------------------------
+#
+#     return results
 
 
 if __name__ == '__main__':

@@ -79,13 +79,31 @@ def draw_glyph(font, text):
     ratio = min(W * 0.9 / text_width, H * 0.9 / text_height)
     new_font = font.font_variant(size=int(g_size * ratio))
 
-    text_width, text_height = new_font.getsize(text)
-    offset_x, offset_y = new_font.getoffset(text)
-    x = (img.width - text_width) // 2
-    y = (img.height - text_height) // 2 - offset_y // 2
+    # text_width, text_height = new_font.getsize(text)
+    # Recalculate bounding box after resizing the font
+    bbox = new_font.getbbox(text)
+    text_width = max(bbox[2] - bbox[0], 5)
+    text_height = max(bbox[3] - bbox[1], 5)
+
+    # Use bbox offsets for centering
+    offset_x, offset_y = bbox[0], bbox[1]
+    x = (img.width - text_width) // 2 - offset_x
+    y = (img.height - text_height) // 2 - offset_y
+
     draw.text((x, y), text, font=new_font, fill='white')
     img = np.expand_dims(np.array(img), axis=2).astype(np.float64)
     return img
+
+    # bbox = new_font.getbbox(text)
+    # text_width = max(bbox[2] - bbox[0], 5)
+    # text_height = max(bbox[3] - bbox[1], 5)
+    #
+    # offset_x, offset_y = new_font.getoffset(text)
+    # x = (img.width - text_width) // 2
+    # y = (img.height - text_height) // 2 - offset_y // 2
+    # draw.text((x, y), text, font=new_font, fill='white')
+    # img = np.expand_dims(np.array(img), axis=2).astype(np.float64)
+    # return img
 
 
 def draw_glyph2(font, text, polygon, vertAng=10, scale=1, width=512, height=512, add_space=True):
