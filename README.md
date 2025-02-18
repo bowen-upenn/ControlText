@@ -31,7 +31,7 @@ Our repository is based on the code of [AnyText](https://github.com/tyxsspa/AnyT
 1. **Prerequisites:**
    We use conda environment to manage all required packages.
     ```
-    conda env create -f environment.yaml
+    conda env create -f environment.yml
     conda activate controltext
     ```
 
