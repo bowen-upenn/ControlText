@@ -5,8 +5,6 @@
 
 Visual text rendering is a challenging task, especially when precise font control is desired. This work demonstrates that diffusion models can achieve **font-controllable** multilingual text rendering using **just raw images without font label annotations**.
 
-![Banner](banner.png)
-
 ---
 
 ## 🚀 Key Takeaways
@@ -23,6 +21,7 @@ Visual text rendering is a challenging task, especially when precise font contro
 - **Working with foundation models:**  
   With limited computational resources, we can still copilot foundational image generation models to perform localized text and font editing.
 
+![Banner](banner.png)
 ---
 
 ## 🔧 How to Train
