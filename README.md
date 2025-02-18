@@ -9,17 +9,17 @@ Visual text rendering is a challenging task, especially when precise font contro
 
 ## 🚀 Key Takeaways
 
-- **No Font Label Annotations Needed:**  
-  A text segmentation model extracts nuanced font details from images, allowing training on large-scale web datasets containing text.
+- **Font controls require no font label annotations:**  
+  A text segmentation model can capture nuanced font information in pixel space without requiring font label annotations in the dataset, enabling zero- shot generation on unseen languages and fonts, as well as scalable training on web-scale image datasets as long as they contain text.
   
-- **Ambiguous Font Evaluation:**  
-  Introduces quantative metrics `l2@k` and `cos@k` for assessing the quality of fuzzy fonts in the open world without the need of ground-truth font labels.
+- **Evaluating ambiguous fonts in the open world:**
+  Fuzzy font accuracy can be measured in the embed- ding space of a pretrained font classification model, utilizing our proposed metrics `l2@k` and `cos@k`.
   
-- **User-Driven Design Flexibility:**  
-  Adds random perturbations on segmented glyphs, providing flexibility for users who might not align text perfectly when using the front-end.
+- **Supporting user-driven design flexibility:**  
+  Random perturbations can be applied to segmented glyphs. While this won’t affect the rendered text quality, it accounts for users not precisely aligning text to best locations and prevents models from rigidly replicating the pixel locations in glyphs.
   
-- **Integration with Foundation Models:**  
-  Works alongside foundational image generation models for localized text and font editing.
+- **Working with foundation models:**  
+  With limited computational resources, we can still copilot foundational image generation models to perform localized text and font editing.
 
 ---
 
