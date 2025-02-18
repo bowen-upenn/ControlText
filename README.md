@@ -52,3 +52,5 @@ Our repository is based on the code of [AnyText](https://github.com/tyxsspa/AnyT
 The front-end code for user-friendly text and font editing are coming soon! Stay tuned for updates as we continue to enhance the project.
 
 
+---
+![Flows](flows.png)
