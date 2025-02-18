@@ -213,6 +213,14 @@ def set_cfg(cfg, dsname):
         cfg.DATA.LOADER_PIPELINE = [
             'NumpyImageLoader'
         ]
+    elif dsname == 'laion_ploss2':
+        cfg.DATA.LOADER_PIPELINE = [
+            'NumpyImageLoader'
+        ]
+    elif dsname == 'wukong_ploss2':
+        cfg.DATA.LOADER_PIPELINE = [
+            'NumpyImageLoader'
+        ]
     else:
         raise ValueError
 

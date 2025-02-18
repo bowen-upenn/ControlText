@@ -48,7 +48,9 @@ from configs.cfg_dataset import (
     cfg_laion_controltext,
     cfg_wukong_ablation,
     cfg_wukong_anytext,
-    cfg_wukong_controltext
+    cfg_wukong_controltext,
+    cfg_laion_ploss2,
+    cfg_wukong_ploss2,
 )
 from configs.cfg_model import cfg_texrnet as cfg_mdel
 from configs.cfg_base import cfg_train, cfg_test
@@ -159,6 +161,10 @@ if __name__ == '__main__':
         cfg_data = cfg_wukong_anytext
     elif args.dsname == 'wukong_controltext':
         cfg_data = cfg_wukong_controltext
+    elif args.dsname == 'laion_ploss2':
+        cfg_data = cfg_laion_ploss2
+    elif args.dsname == 'wukong_ploss2':
+        cfg_data = cfg_wukong_ploss2
 
     else:
         raise ValueError
@@ -259,6 +265,10 @@ if __name__ == '__main__':
         elif args.dsname == 'wukong_anytext':
             cfg.DATA.DATASET_MODE = 'test'
         elif args.dsname == 'wukong_controltext':
+            cfg.DATA.DATASET_MODE = 'test'
+        elif args.dsname == 'laion_ploss2':
+            cfg.DATA.DATASET_MODE = 'test'
+        elif args.dsname == 'wukong_ploss2':
             cfg.DATA.DATASET_MODE = 'test'
 
         else:

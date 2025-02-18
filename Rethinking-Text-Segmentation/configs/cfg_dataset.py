@@ -15,6 +15,28 @@ cfg.NUM_WORKERS_PER_GPU = None
 cfg.NUM_WORKERS = None
 cfg.TRY_SAMPLE = None
 
+#################################
+#####    laion_ploss2       #####
+#################################
+cfg_laion_ploss2 = copy.deepcopy(cfg)
+cfg_laion_ploss2.DATASET_NAME = 'laion_ploss2'
+cfg_laion_ploss2.ROOT_DIR = '/pool/bwjiang/controltext/eval/laion_controltext_ploss2'
+cfg_laion_ploss2.IM_MEAN = [0.485, 0.456, 0.406]
+cfg_laion_ploss2.IM_STD = [0.229, 0.224, 0.225]
+cfg_laion_ploss2.SEGLABEL_IGNORE_LABEL = 999
+cfg_laion_ploss2.CLASS_NUM = 2
+
+#################################
+#####    wukong_ploss2      #####
+#################################
+cfg_wukong_ploss2 = copy.deepcopy(cfg)
+cfg_wukong_ploss2.DATASET_NAME = 'wukong_ploss2'
+cfg_wukong_ploss2.ROOT_DIR = '/pool/bwjiang/controltext/eval/wukong_controltext_ploss2'
+cfg_wukong_ploss2.IM_MEAN = [0.485, 0.456, 0.406]
+cfg_wukong_ploss2.IM_STD = [0.229, 0.224, 0.225]
+cfg_wukong_ploss2.SEGLABEL_IGNORE_LABEL = 999
+cfg_wukong_ploss2.CLASS_NUM = 2
+
 
 #################################
 #####   laion_ablation      #####
