@@ -25,7 +25,7 @@ Visual text rendering is a challenging task, especially when precise font contro
 
 ## 🔧 How to Train
 
-Our training pipeline uses [PyTorch Lightning](https://www.pytorchlightning.ai/) for scalability and reproducibility. Below is a brief walkthrough:
+Our repository is based on the code of [AnyText](https://github.com/tyxsspa/AnyText). We build upon and extend it to enable user-controllable fonts in zero-shot. Below is a brief walkthrough:
 
 1. **Prerequisites:**
    We use conda environment to manage all required packages.
