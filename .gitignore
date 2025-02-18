@@ -152,3 +152,4 @@ font/*.ttf
 *.png
 *.jpeg
 synthetic_dataset/
+frontend/
