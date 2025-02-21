@@ -1,5 +1,6 @@
 ## This is the official implementation of the paper [ControlText: Unlocking Controllable Fonts in Multilingual Text Rendering without Font Annotations](https://arxiv.org/abs/2502.10999) in PyTorch.
 [![Arxiv](https://img.shields.io/badge/ArXiv-Paper-B31B1B)](https://arxiv.org/abs/2502.10999)
+[![Google Scholar](https://img.shields.io/badge/Google_Scholar-Cite_Our_Paper-4085F4)](https://scholar.google.com/scholar?hl=en&as_sdt=0%2C39&q=ControlText%3A+Unlocking+Controllable+Fonts+in+Multilingual+Text+Rendering+without+Font+Annotations&btnG=)
 
 ## ✨ Overview
 
@@ -24,6 +25,16 @@ Visual text rendering is a challenging task, especially when precise font contro
 ![Banner](banner.png)
 ---
 
+## Citation
+If you find our work inspires you, please consider citing it. Thank you!
+
+    @article{jiang2025controltext,
+      title={ControlText: Unlocking Controllable Fonts in Multilingual Text Rendering without Font Annotations},
+      author={Jiang, Bowen and Yuan, Yuan and Bai, Xinyi and Hao, Zhuoqun and Yin, Alyson and Hu, Yaojie and Liao, Wenyu and Ungar, Lyle and Taylor, Camillo J},
+      journal={arXiv preprint arXiv:2502.10999},
+      year={2025}
+    }
+    
 ## 🔧 How to Train
 
 Our repository is based on the code of [AnyText](https://github.com/tyxsspa/AnyText). We build upon and extend it to enable user-controllable fonts in zero-shot. Below is a brief walkthrough:
