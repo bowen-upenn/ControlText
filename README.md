@@ -48,11 +48,12 @@ Our repository is based on the code of [AnyText](https://github.com/tyxsspa/AnyT
 
 3. **Preprocess Glyphs:**
 
-4. **Configuration:**
+
+5. **Configuration:**
    - Adjust hyperparameters such as `batch_size`, `grad_accum`, `learning_rate`, `logger_freq`, and `max_epochs` in the training script `train.py`. Please keep `mask_ratio = 1`.
    - Set paths for GPUs, checkpoints, model configuration file, image datasets, and preprocessed glyphs accordingly.
 
-5. **Training Command:**
+6. **Training Command:**
    Run the training script:
    ```bash
    python train.py
@@ -63,10 +64,29 @@ Our repository is based on the code of [AnyText](https://github.com/tyxsspa/AnyT
 The front-end code for user-friendly text and font editing are coming soon! Stay tuned for updates as we continue to enhance the project.
 
 ## 👩‍💻 Evaluation
+1. **Our Generated Data**
+   
+   laion_controltext [Google Drive](https://drive.google.com/file/d/1sxzAENTWDAixkMFMHyOeXcyhZOq7WY2B/view?usp=sharing), laion_controltext_gly_lines (cropped regions for each line of text from the entire image) [Google Drive](https://drive.google.com/file/d/1JrJTkJ8oePXUo9d8E5QOVsh0DBWi82P_/view?usp=sharing), laion_controltext_gly_lines_grayscale (laion_controltext_gly_lines after text segmentation) [Google Drive](https://drive.google.com/file/d/1qSQs_NB3jUe08YZLaKmM42iJWqT7mmjA/view?usp=drive_link), laion_gly_lines_gt (cropped regions from input glyphs after text segmentation) [Google Drive](https://drive.google.com/file/d/1XiRu24gRiYwpODyjuJnW1XyJ9kd-1f9U/view?usp=drive_link)
 
-1. **Script for evaluating text accuracy:**
+ 
+   wukong_controltext [Google Drive](https://drive.google.com/file/d/1ZCeEsD4aCeK0OePNUHQ96Pp3Xq_f4pW2/view?usp=drive_link), wukong_controltext_gly_line [Google Drive](https://drive.google.com/file/d/1weseRPN5mNA2NNeOjUxFQxA7Fu6K4CuZ/view?usp=drive_link), wukong_controltext_glylines_grayscale [Google Drive](https://drive.google.com/file/d/1uyWyF_FwMhyAyVRsBQsTx9G7Ar5dZBMb/view?usp=drive_link), wukong_gly_lines_gt [Google Drive](https://drive.google.com/file/d/1XKsliU0-XVxj7YUyfbGaAq1PCED18s1a/view?usp=drive_link)
 
-2. **Script for evaluating font accuracy in the open world:**
+3. **Our Model Checkpoint**
+
+     [Google Drive](https://drive.google.com/file/d/1fUNeKqoGhGutkcCFTHa3USkhChlfE_kQ/view?usp=sharing)
+
+5. **Script for evaluating text accuracy:**
+
+      Run the following script to calculate SenACC and NED scores for text accuracy, which will evaluate ```laion_controltext_gly_lines``` and ```wukong_controltext_gly_line```.
+      ```
+      bash eval/eval_dgocr.sh
+      ```
+      Run the following script to calculate FID score for overall image quality, which will evaluate ```laion_controltext``` and ```wukong_controltext```.
+      ```
+      bash eval/eval_fid.sh
+      ```
+
+7. **Script for evaluating font accuracy in the open world:**
 
 ---
 ![Flows](flows.png)
