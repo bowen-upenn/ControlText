@@ -221,6 +221,34 @@ def set_cfg(cfg, dsname):
         cfg.DATA.LOADER_PIPELINE = [
             'NumpyImageLoader'
         ]
+    elif dsname == 'glyphcontrol_laion':
+        cfg.DATA.LOADER_PIPELINE = [
+            'NumpyImageLoader'
+        ]
+    elif dsname == 'glyphcontrol_wukong':
+        cfg.DATA.LOADER_PIPELINE = [
+            'NumpyImageLoader'
+        ]
+    elif dsname == 'textdiffuser_laion':
+        cfg.DATA.LOADER_PIPELINE = [
+            'NumpyImageLoader'
+        ]
+    elif dsname == 'textdiffuser_wukong':
+        cfg.DATA.LOADER_PIPELINE = [
+            'NumpyImageLoader'
+        ]
+    elif dsname == 'controlnet_laion':
+        cfg.DATA.LOADER_PIPELINE = [
+            'NumpyImageLoader'
+        ]
+    elif dsname == 'controlnet_wukong':
+        cfg.DATA.LOADER_PIPELINE = [
+            'NumpyImageLoader'
+        ]
+    elif dsname == 'MLe2e':
+        cfg.DATA.LOADER_PIPELINE = [
+            'NumpyImageLoader'
+        ]
     else:
         raise ValueError
 

@@ -51,6 +51,13 @@ from configs.cfg_dataset import (
     cfg_wukong_controltext,
     cfg_laion_ploss2,
     cfg_wukong_ploss2,
+    cfg_glyphcontrol_laion,
+    cfg_glyphcontrol_wukong,
+    cfg_textdiffuser_laion,
+    cfg_textdiffuser_wukong,
+    cfg_controlnet_laion,
+    cfg_controlnet_wukong,
+    cfg_MLe2e
 )
 from configs.cfg_model import cfg_texrnet as cfg_mdel
 from configs.cfg_base import cfg_train, cfg_test
@@ -165,7 +172,20 @@ if __name__ == '__main__':
         cfg_data = cfg_laion_ploss2
     elif args.dsname == 'wukong_ploss2':
         cfg_data = cfg_wukong_ploss2
-
+    elif args.dsname == 'glyphcontrol_laion':
+        cfg_data = cfg_glyphcontrol_laion
+    elif args.dsname == 'glyphcontrol_wukong':
+        cfg_data = cfg_glyphcontrol_wukong
+    elif args.dsname == 'textdiffuser_laion':
+        cfg_data = cfg_textdiffuser_laion
+    elif args.dsname == 'textdiffuser_wukong':
+        cfg_data = cfg_textdiffuser_wukong
+    elif args.dsname == 'controlnet_laion':
+        cfg_data = cfg_controlnet_laion
+    elif args.dsname == 'controlnet_wukong':
+        cfg_data = cfg_controlnet_wukong
+    elif args.dsname == 'MLe2e':
+        cfg_data = cfg_MLe2e
     else:
         raise ValueError
 
@@ -270,7 +290,20 @@ if __name__ == '__main__':
             cfg.DATA.DATASET_MODE = 'test'
         elif args.dsname == 'wukong_ploss2':
             cfg.DATA.DATASET_MODE = 'test'
-
+        elif args.dsname == 'glyphcontrol_laion':
+            cfg.DATA.DATASET_MODE = 'test'
+        elif args.dsname == 'glyphcontrol_wukong':
+            cfg.DATA.DATASET_MODE = 'test'
+        elif args.dsname == 'textdiffuser_laion':
+            cfg.DATA.DATASET_MODE = 'test'
+        elif args.dsname == 'textdiffuser_wukong':
+            cfg.DATA.DATASET_MODE = 'test'
+        elif args.dsname == 'controlnet_laion':
+            cfg.DATA.DATASET_MODE = 'test'
+        elif args.dsname == 'controlnet_wukong':
+            cfg.DATA.DATASET_MODE = 'test'
+        elif args.dsname == 'MLe2e':
+            cfg.DATA.DATASET_MODE = 'test'
         else:
             raise ValueError
 

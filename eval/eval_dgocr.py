@@ -49,10 +49,11 @@ def get_ld(ls1, ls2):
     str1 = ''.join(map(str, ls1))
     str2 = ''.join(map(str, ls2))
 
-    # Calculate Levenshtein distance
+    # Calculate Levenshtein distance on the concatenated strings
     edit_dist = Levenshtein.distance(str1, str2)
-    # edit_dist = Levenshtein.distance(ls1, ls2)
-    return 1 - edit_dist/(max(len(ls1), len(ls2)) + 1e-5)
+
+    # Normalize using the length of the strings instead of the list lengths
+    return 1 - edit_dist / (max(len(str1), len(str2)) + 1e-5)
 
 
 def pre_process(img_list, shape):
@@ -130,12 +131,16 @@ def main():
         if 'gly_lines' in img_dir:
             for j in range(num_samples):
                 for k in range(n_lines):
-                    img_path = os.path.join(img_dir, img_name + f"_{j}_{item_dict['texts'][k]}.jpg")
+                    img_path = os.path.join(img_dir, img_name + f"_{j}_{k}_{item_dict['texts'][k]}.jpg")
                     gt_texts = item_dict['texts'][k]
 
                     # find if image path exists
                     if not os.path.exists(img_path):
-                        continue
+                        # print(f'Image path {img_path} does not exist, skip')
+                        img_path = os.path.join(img_dir, img_name + f"_{j}_{item_dict['texts'][k]}.jpg")
+                        if not os.path.exists(img_path):
+                            # print(f'Image path {img_path} does not exist, skip')
+                            continue
 
                     if 'laion' in img_dir:
                         pred_texts = ocr_en.ocr(img_path, det=False, cls=False)[0][0][0]

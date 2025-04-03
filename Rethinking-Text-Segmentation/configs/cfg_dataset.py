@@ -15,6 +15,90 @@ cfg.NUM_WORKERS_PER_GPU = None
 cfg.NUM_WORKERS = None
 cfg.TRY_SAMPLE = None
 
+
+#################################
+#####        MLe2e          #####
+#################################
+cfg_MLe2e = copy.deepcopy(cfg)
+cfg_MLe2e.DATASET_NAME = 'MLe2e'
+cfg_MLe2e.ROOT_DIR = '/pool/bwjiang/datasets/MLe2e/test_jpg'
+cfg_MLe2e.IM_MEAN = [0.485, 0.456, 0.406]
+cfg_MLe2e.IM_STD = [0.229, 0.224, 0.225]
+cfg_MLe2e.SEGLABEL_IGNORE_LABEL = 999
+cfg_MLe2e.CLASS_NUM = 2
+
+#################################
+#####  glyphcontrol_laion   #####
+#################################
+cfg_glyphcontrol_laion = copy.deepcopy(cfg)
+cfg_glyphcontrol_laion.DATASET_NAME = 'glyphcontrol_laion'
+cfg_glyphcontrol_laion.ROOT_DIR = '/pool/bwjiang/controltext/eval/anytext_eval_imgs/glyphcontrol_laion_generated'
+cfg_glyphcontrol_laion.IM_MEAN = [0.485, 0.456, 0.406]
+cfg_glyphcontrol_laion.IM_STD = [0.229, 0.224, 0.225]
+cfg_glyphcontrol_laion.SEGLABEL_IGNORE_LABEL = 999
+cfg_glyphcontrol_laion.CLASS_NUM = 2
+
+
+#################################
+#####  glyphcontrol_wukong   #####
+#################################
+cfg_glyphcontrol_wukong = copy.deepcopy(cfg)
+cfg_glyphcontrol_wukong.DATASET_NAME = 'glyphcontrol_wukong'
+cfg_glyphcontrol_wukong.ROOT_DIR = '/pool/bwjiang/controltext/eval/anytext_eval_imgs/glyphcontrol_wukong_generated'
+cfg_glyphcontrol_wukong.IM_MEAN = [0.485, 0.456, 0.406]
+cfg_glyphcontrol_wukong.IM_STD = [0.229, 0.224, 0.225]
+cfg_glyphcontrol_wukong.SEGLABEL_IGNORE_LABEL = 999
+cfg_glyphcontrol_wukong.CLASS_NUM = 2
+
+
+#################################
+#####  textdiffuser_laion   #####
+#################################
+cfg_textdiffuser_laion = copy.deepcopy(cfg)
+cfg_textdiffuser_laion.DATASET_NAME = 'textdiffuser_laion'
+cfg_textdiffuser_laion.ROOT_DIR = '/pool/bwjiang/controltext/eval/anytext_eval_imgs/textdiffuser_laion_generated'
+cfg_textdiffuser_laion.IM_MEAN = [0.485, 0.456, 0.406]
+cfg_textdiffuser_laion.IM_STD = [0.229, 0.224, 0.225]
+cfg_textdiffuser_laion.SEGLABEL_IGNORE_LABEL = 999
+cfg_textdiffuser_laion.CLASS_NUM = 2
+
+
+#################################
+#####  textdiffuser_wukong   #####
+#################################
+cfg_textdiffuser_wukong = copy.deepcopy(cfg)
+cfg_textdiffuser_wukong.DATASET_NAME = 'textdiffuser_wukong'
+cfg_textdiffuser_wukong.ROOT_DIR = '/pool/bwjiang/controltext/eval/anytext_eval_imgs/textdiffuser_wukong_generated'
+cfg_textdiffuser_wukong.IM_MEAN = [0.485, 0.456, 0.406]
+cfg_textdiffuser_wukong.IM_STD = [0.229, 0.224, 0.225]
+cfg_textdiffuser_wukong.SEGLABEL_IGNORE_LABEL = 999
+cfg_textdiffuser_wukong.CLASS_NUM = 2
+
+
+#################################
+#####  controlnet_laion   #####
+#################################
+cfg_controlnet_laion = copy.deepcopy(cfg)
+cfg_controlnet_laion.DATASET_NAME = 'controlnet_laion'
+cfg_controlnet_laion.ROOT_DIR = '/pool/bwjiang/controltext/eval/anytext_eval_imgs/controlnet_laion_generated'
+cfg_controlnet_laion.IM_MEAN = [0.485, 0.456, 0.406]
+cfg_controlnet_laion.IM_STD = [0.229, 0.224, 0.225]
+cfg_controlnet_laion.SEGLABEL_IGNORE_LABEL = 999
+cfg_controlnet_laion.CLASS_NUM = 2
+
+
+#################################
+#####  controlnet_wukong   #####
+#################################
+cfg_controlnet_wukong = copy.deepcopy(cfg)
+cfg_controlnet_wukong.DATASET_NAME = 'controlnet_wukong'
+cfg_controlnet_wukong.ROOT_DIR = '/pool/bwjiang/controltext/eval/anytext_eval_imgs/controlnet_wukong_generated'
+cfg_controlnet_wukong.IM_MEAN = [0.485, 0.456, 0.406]
+cfg_controlnet_wukong.IM_STD = [0.229, 0.224, 0.225]
+cfg_controlnet_wukong.SEGLABEL_IGNORE_LABEL = 999
+cfg_controlnet_wukong.CLASS_NUM = 2
+
+
 #################################
 #####    laion_ploss2       #####
 #################################
