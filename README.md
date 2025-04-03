@@ -88,5 +88,11 @@ The front-end code for user-friendly text and font editing are coming soon! Stay
 
 7. **Script for evaluating font accuracy in the open world:**
 
+     Run the following script to calculate the font accuracy
+     ```
+     bash eval/eval_font.sh --generated_folder path/to/your/generated_folder --gt_folder path/to/your/gt_folder
+     ```
+     In the argument, ```path/to/your/generated_folder``` should point to the directory containing your generated images, for example, ```laion_controltext_gly_lines_grayscale``` or ```wukong_controltext_glylines_grayscale```. Similarly, ```path/to/your/gt_folder``` should refer to the directory containing the ground-truth glyph images or the segmented glyphs used as input conditions, where we use ```laion_gly_lines_gt``` or ```wukong_gly_lines_gt```.
+
 ---
 ![Flows](flows.png)
